@@ -58,7 +58,7 @@ const Footer = () => {
                         <Link to="/terms" className="hover:text-foreground transition-colors">TERMS OF SERVICE</Link>
                         <Link to="/cookies" className="hover:text-foreground transition-colors">COOKIES</Link>
                     </div>
-                    <p>DESIGNED & DEVELOPED WITH INTENT</p>
+                    <p>DESIGNED AND DEVELOP BY Aditya Lashkari</p>
                 </div>
             </div>
         </footer>
