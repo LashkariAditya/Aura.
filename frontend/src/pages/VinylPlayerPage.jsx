@@ -47,10 +47,10 @@ const VinylPlayerPage = () => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.5 }}
-                className="fixed inset-0 z-[60] bg-black text-white overflow-hidden flex flex-col justify-end pb-12"
+                className="fixed inset-0 z-[70] bg-transparent text-white overflow-hidden flex flex-col justify-end pointer-events-none"
             >
                 {/* Back button positioned above the video overlay */}
-                <div className="absolute top-8 left-8 z-[70]">
+                <div className="absolute top-8 left-8 z-[80] pointer-events-auto">
                     <button
                         onClick={toggleVideoMode}
                         className="px-6 py-3 flex items-center justify-center space-x-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full transition-all border border-white/10 hover:border-white/30 group"
@@ -61,12 +61,12 @@ const VinylPlayerPage = () => {
                 </div>
 
                 {/* 
-                  The YouTube player is injected by MusicContext directly inside this 
-                  black container via global fixed CSS (`z-[65]`), spanning `h-[calc(100vh-160px)]`. 
+                  The YouTube player is injected by MusicContext directly behind this 
+                  transparent container via global fixed CSS (`z-[65]`), spanning `h-full`. 
                 */}
 
                 {/* The bottom controls spanning ~160px overlaying the video's bottom subtly */}
-                <div className="w-full max-w-5xl mx-auto px-8 lg:px-16 relative z-[70] pt-12 pb-4 bg-gradient-to-t from-black via-black/90 to-transparent">
+                <div className="w-full max-w-5xl mx-auto px-8 lg:px-16 relative z-[80] pt-24 pb-12 bg-gradient-to-t from-black via-black/90 to-transparent pointer-events-auto">
                     {/* Progress */}
                     <div className="space-y-6 mb-10">
                         <div

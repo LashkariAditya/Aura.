@@ -398,7 +398,7 @@ export const MusicProvider = ({ children }) => {
             <div
                 className={
                     isVideoMode && isYtRef.current
-                        ? "fixed top-0 left-0 w-full h-[calc(100vh-160px)] z-[65] bg-black transition-all duration-500 overflow-hidden flex items-center justify-center pointer-events-none"
+                        ? "fixed top-0 left-0 w-full h-screen z-[65] bg-black transition-all duration-500 overflow-hidden flex items-center justify-center pointer-events-none"
                         : "fixed overflow-hidden opacity-0 pointer-events-none w-0 h-0"
                 }
                 style={!isVideoMode ? { zIndex: -9999 } : {}}
