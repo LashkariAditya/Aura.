@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
-import songService from '../../services/songService';
 import artistService from '../../services/artistService';
 import youtubeService from '../../services/youtubeService';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -42,9 +41,9 @@ const SearchOverlay = ({ isOpen, onClose }) => {
 
             setLoading(true);
             try {
-                // Fetch songs, artists, and youtube results in parallel
-                const [songsRes, artistsRes, youtubeRes] = await Promise.all([
-                    songService.getSongs({ search: debouncedSearch, limit: 12 }),
+                // Fetch artists and youtube results in parallel
+                // User requested search output to be exclusively from YouTube to ensure full catalog access
+                const [artistsRes, youtubeRes] = await Promise.all([
                     artistService.getArtists(),
                     youtubeService.search(debouncedSearch).catch((err) => {
                         console.error('YOUTUBE_FETCH_ERROR:', err);
@@ -57,9 +56,8 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                     a.name.toLowerCase().includes(debouncedSearch.toLowerCase())
                 );
 
-                // Combine local and youtube songs
+                // Use only YouTube songs for search results as requested
                 const allSongs = [
-                    ...(songsRes.data?.songs || []),
                     ...(youtubeRes.data?.songs || [])
                 ];
 

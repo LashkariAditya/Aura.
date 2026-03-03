@@ -11,8 +11,15 @@ export const searchYouTube = async (req, res) => {
     }
 
     try {
-        const r = await ytSearch(query);
-        const videos = r.videos.slice(0, 10); // Limit to 10 results
+        // Appending 'song' or 'audio' to make the search results precise for music
+        let searchQuery = query;
+        if (!/(song|audio|music|cover|remix|lofi|instrumental|karaoke)/i.test(searchQuery)) {
+            searchQuery += ' song';
+        }
+
+        const r = await ytSearch(searchQuery);
+        // Filter out very long videos (over 15 minutes) and limit to 15 results
+        const videos = r.videos.filter(v => v.seconds < 900).slice(0, 15);
 
         const formattedResults = videos.map(v => ({
             _id: `yt_${v.videoId}`,
