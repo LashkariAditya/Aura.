@@ -17,6 +17,7 @@ export const MusicProvider = ({ children }) => {
     const [isShuffle, setIsShuffle] = useState(false);
     const [repeatMode, setRepeatMode] = useState('off');
     const [likedSongsIds, setLikedSongsIds] = useState([]);
+    const [isVideoMode, setIsVideoMode] = useState(false);
 
     // Refs for state accessed inside callbacks
     const queueRef = useRef([]);
@@ -386,18 +387,27 @@ export const MusicProvider = ({ children }) => {
                 currentTime: getCurrentTime(),
                 duration: getDuration(),
                 analyser: analyserRef.current,
-                setPlaybackLock
+                setPlaybackLock,
+                isVideoMode,
+                toggleVideoMode: () => setIsVideoMode(!isVideoMode)
             }}
         >
             {children}
             {/* Hidden YouTube Player embedded securely in DOM to stream audio securely using verified Youtube Iframe API natively without breaking API endpoints! 
                 Important note: To bypass backend timeouts, the best method always integrates playback directly into the frontend context block! */}
-            <div className="fixed overflow-hidden opacity-0 pointer-events-none w-0 h-0" style={{ zIndex: -9999 }}>
+            <div
+                className={
+                    isVideoMode && isYtRef.current
+                        ? "fixed top-0 left-0 w-full h-[calc(100vh-160px)] z-[65] bg-black transition-all duration-500"
+                        : "fixed overflow-hidden opacity-0 pointer-events-none w-0 h-0"
+                }
+                style={!isVideoMode ? { zIndex: -9999 } : {}}
+            >
                 <YouTube
                     videoId="" // will be loaded via ref
                     opts={{
-                        height: '100',
-                        width: '100',
+                        height: '100%',
+                        width: '100%',
                         host: 'https://www.youtube-nocookie.com',
                         playerVars: {
                             autoplay: 0,
@@ -435,6 +445,7 @@ export const MusicProvider = ({ children }) => {
                         setIsLoading(false);
                         nextSong(true);
                     }}
+                    className="w-full h-full"
                 />
             </div>
         </MusicContext.Provider>

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Volume2, Heart, Share2, MoreHorizontal } from 'lucide-react';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Volume2, Heart, Share2, MoreHorizontal, MonitorPlay } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 import { useNavigate } from 'react-router-dom';
 import Visualizer from '../components/music/Visualizer';
@@ -24,7 +24,9 @@ const VinylPlayerPage = () => {
         isLiked,
         toggleLike,
 
-        analyser
+        analyser,
+        isVideoMode,
+        toggleVideoMode
     } = useMusic();
 
     const navigate = useNavigate();
@@ -35,6 +37,100 @@ const VinylPlayerPage = () => {
             <div className="h-screen flex items-center justify-center bg-background">
                 <p className="font-serif text-2xl text-gray-400">NO SONIC SELECTION</p>
             </div>
+        );
+    }
+
+    if (isVideoMode) {
+        return (
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+                className="fixed inset-0 z-[60] bg-black text-white overflow-hidden flex flex-col justify-end pb-12"
+            >
+                {/* Back button positioned above the video overlay */}
+                <div className="absolute top-8 left-8 z-[70]">
+                    <button
+                        onClick={toggleVideoMode}
+                        className="w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                    >
+                        <ChevronDown className="w-6 h-6 rotate-90" />
+                    </button>
+                </div>
+
+                {/* 
+                  The YouTube player is injected by MusicContext directly inside this 
+                  black container via global fixed CSS (`z-[65]`), spanning `h-[calc(100vh-160px)]`. 
+                */}
+
+                {/* The bottom controls spanning ~160px overlaying the video's bottom subtly */}
+                <div className="w-full max-w-5xl mx-auto px-8 lg:px-16 relative z-[70] pt-12 pb-4 bg-gradient-to-t from-black via-black/90 to-transparent">
+                    {/* Progress */}
+                    <div className="space-y-6 mb-10">
+                        <div
+                            className="h-1.5 bg-white/20 relative cursor-pointer group rounded-full"
+                            onClick={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const x = e.clientX - rect.left;
+                                seek((x / rect.width) * 100);
+                            }}
+                        >
+                            <motion.div
+                                className="absolute top-0 left-0 h-full bg-white rounded-full"
+                                style={{ width: `${progress}%` }}
+                            />
+                            <div
+                                className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white shadow-lg scale-0 group-hover:scale-100 transition-transform"
+                                style={{ left: `${progress}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between text-xs font-mono tracking-widest text-gray-400">
+                            <span>{formatTime((progress / 100) * (currentSong.duration || 0))}</span>
+                            <span>{formatTime(currentSong.duration || 0)}</span>
+                        </div>
+                    </div>
+
+                    {/* Controls Row aligned to Screenshot 2 */}
+                    <div className="flex items-center justify-between pb-6">
+                        <button
+                            onClick={toggleShuffle}
+                            className={`transition-colors ${isShuffle ? 'text-white' : 'text-gray-600 hover:text-white'}`}
+                        >
+                            <Shuffle size={20} strokeWidth={1.5} />
+                        </button>
+
+                        <div className="flex items-center space-x-12 md:space-x-16">
+                            <button onClick={previousSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
+                                <SkipBack className="w-8 h-8 md:w-9 md:h-9" fill="currentColor" strokeWidth={1} />
+                            </button>
+
+                            <button
+                                onClick={togglePlay}
+                                className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-2xl"
+                            >
+                                {isPlaying ? (
+                                    <Pause className="w-8 h-8 md:w-10 md:h-10" fill="currentColor" strokeWidth={1} />
+                                ) : (
+                                    <Play className="w-8 h-8 md:w-10 md:h-10 ml-2" fill="currentColor" strokeWidth={1} />
+                                )}
+                            </button>
+
+                            <button onClick={nextSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
+                                <SkipForward className="w-8 h-8 md:w-9 md:h-9" fill="currentColor" strokeWidth={1} />
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={toggleRepeat}
+                            className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-gray-600 hover:text-white'}`}
+                        >
+                            <Repeat size={20} strokeWidth={1.5} />
+                            {repeatMode === 'one' && <span className="absolute -top-2 -right-2 text-[10px] font-bold">1</span>}
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
         );
     }
 
@@ -220,11 +316,17 @@ const VinylPlayerPage = () => {
                             <div className="absolute top-0 left-0 h-full bg-gray-400" style={{ width: `${volume}%` }} />
                         </div>
                         <button
+                            onClick={() => toggleVideoMode()}
+                            className="text-gray-300 hover:text-foreground transition-colors"
+                        >
+                            <MonitorPlay size={20} strokeWidth={1.5} />
+                        </button>
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setIsPlaylistModalOpen(true);
                             }}
-                            className="text-gray-300 hover:text-foreground transition-colors"
+                            className="text-gray-300 hover:text-foreground transition-colors pl-2"
                         >
                             <MoreHorizontal size={20} strokeWidth={1.5} />
                         </button>
