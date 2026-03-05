@@ -137,6 +137,12 @@ const VinylPlayerPage = () => {
         );
     }
 
+    const nameLength = currentSong.title?.length || 0;
+    const titleSize = nameLength > 50 ? 'text-2xl sm:text-3xl lg:text-4xl' :
+        nameLength > 30 ? 'text-3xl sm:text-5xl lg:text-5xl' :
+            nameLength > 15 ? 'text-4xl sm:text-6xl lg:text-6xl' :
+                'text-4xl sm:text-6xl lg:text-8xl';
+
     return (
         <motion.div
             initial={{ y: '100%' }}
@@ -212,7 +218,7 @@ const VinylPlayerPage = () => {
                                 initial={{ y: 20, opacity: 0 }}
                                 animate={{ y: 0, opacity: 1 }}
                                 transition={{ delay: 0.5 }}
-                                className="hero-title text-4xl sm:text-6xl lg:text-8xl leading-tight"
+                                className={`hero-title ${titleSize} leading-tight transition-all duration-300`}
                             >
                                 {currentSong.title}
                             </motion.h1>
