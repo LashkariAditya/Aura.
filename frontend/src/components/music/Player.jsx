@@ -31,6 +31,11 @@ const Player = () => {
     // Hide if we are on the full vinyl player page
     if (location.pathname === '/player') return null;
 
+    const nameLength = currentSong.title?.length || 0;
+    const titleSize = nameLength > 40 ? 'text-xs md:text-sm' :
+        nameLength > 20 ? 'text-sm md:text-base' :
+            'text-base md:text-lg';
+
     return (
         <motion.div
             initial={{ y: 100 }}
@@ -39,7 +44,7 @@ const Player = () => {
         >
             <div className="max-w-[1920px] mx-auto w-full grid grid-cols-2 lg:grid-cols-3 items-center">
                 {/* Song Info */}
-                <Link to="/player" className="flex items-center space-x-4 md:space-x-6 group overflow-hidden">
+                <Link to="/player" className="flex items-center space-x-4 md:space-x-6 group overflow-hidden min-w-0">
                     <div className="w-12 h-12 md:w-16 md:h-16 flex-shrink-0 bg-muted overflow-hidden relative">
                         <img
                             src={currentSong.coverUrl}
@@ -48,8 +53,18 @@ const Player = () => {
                         />
                     </div>
                     <div className="min-w-0">
-                        <h4 className="font-serif text-base md:text-lg leading-tight group-hover:text-black transition-colors truncate">{currentSong.title}</h4>
-                        <p className="text-[8px] md:text-[9px] uppercase tracking-[0.3em] text-gray-400 mt-1 font-medium truncate">{currentSong.artist}</p>
+                        <h4
+                            className={`font-serif ${titleSize} leading-tight group-hover:text-black transition-colors truncate`}
+                            title={currentSong.title}
+                        >
+                            {currentSong.title}
+                        </h4>
+                        <p
+                            className="text-[8px] md:text-[9px] uppercase tracking-[0.3em] text-gray-400 mt-1 font-medium truncate"
+                            title={currentSong.artist}
+                        >
+                            {currentSong.artist}
+                        </p>
                     </div>
                 </Link>
 
