@@ -62,6 +62,9 @@ app.use(helmet({
                 "ws://127.0.0.1:5000",
                 "http://localhost:5001",
                 "http://localhost:5173",
+                "https://aura-music-67.vercel.app",
+                "https://aura-music.up.railway.app",
+                "wss://aura-music.up.railway.app",
             ],
             "media-src": [
                 "'self'",
@@ -71,22 +74,50 @@ app.use(helmet({
         }
     }
 }));
+// ─── CORS: set headers on EVERY response (including errors) ───────────────────
+const ALLOWED_ORIGINS = [
+    process.env.FRONTEND_URL,          // e.g. https://aura-music-67.vercel.app
+    'https://aura-music-67.vercel.app', // explicit production fallback
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+].filter(Boolean);
+
+// Manual early middleware — runs before Helmet/routes so error paths also get headers
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const isAllowed =
+        !origin ||
+        ALLOWED_ORIGINS.includes(origin) ||
+        /\.vercel\.app$/.test(origin) ||
+        /\.railway\.app$/.test(origin);
+
+    if (isAllowed && origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+
+    // Handle preflight immediately
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+});
+
 app.use(cors({
-    // Allow all localhost origins used in development
     origin: (origin, callback) => {
-        const allowed = [
-            process.env.FRONTEND_URL || 'http://localhost:5173',
-            'http://localhost:5173',
-            'http://localhost:5174',
-            'http://localhost:3000',
-        ];
-        if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
-            callback(null, true);
-        } else {
-            callback(null, false);
-        }
+        const isAllowed =
+            !origin ||
+            ALLOWED_ORIGINS.includes(origin) ||
+            /\.vercel\.app$/.test(origin) ||
+            /\.railway\.app$/.test(origin);
+        callback(null, isAllowed);
     },
-    credentials: true
+    credentials: true,
+    optionsSuccessStatus: 204,
 }));
 app.use(compression());
 
@@ -199,19 +230,14 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
         origin: (origin, callback) => {
-            const allowed = [
-                process.env.FRONTEND_URL || 'http://localhost:5173',
-                'http://localhost:5173',
-                'http://localhost:5174',
-                'http://localhost:3000',
-            ];
-            if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
-                callback(null, true);
-            } else {
-                callback(null, false);
-            }
+            const isAllowed =
+                !origin ||
+                ALLOWED_ORIGINS.includes(origin) ||
+                /\.vercel\.app$/.test(origin) ||
+                /\.railway\.app$/.test(origin);
+            callback(null, isAllowed);
         },
-        credentials: true
+        credentials: true,
     }
 });
 
