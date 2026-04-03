@@ -51,15 +51,32 @@ const VinylPlayerPage = () => {
                 transition={{ duration: 0.5 }}
                 className="fixed inset-0 z-[70] bg-transparent text-white overflow-hidden flex flex-col justify-end pointer-events-none"
             >
-                {/* Back button positioned above the video overlay */}
-                <div className="absolute top-8 left-8 z-[80] pointer-events-auto">
+                {/* Header Controls */}
+                <div className="absolute top-8 left-8 right-8 z-[80] flex justify-between items-center pointer-events-auto">
                     <button
                         onClick={toggleVideoMode}
-                        className="px-6 py-3 flex items-center justify-center space-x-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full transition-all border border-white/10 hover:border-white/30 group"
+                        className="px-5 py-2.5 flex items-center justify-center space-x-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full transition-all border border-white/10 hover:border-white/30 group"
                     >
-                        <ChevronDown className="w-5 h-5 rotate-90 group-hover:-translate-x-1 transition-transform" />
-                        <span className="font-bold text-[10px] tracking-[0.2em] uppercase">Audio</span>
+                        <ChevronDown className="w-4 h-4 rotate-90 group-hover:-translate-x-1 transition-transform" />
+                        <span className="font-bold text-[9px] tracking-[0.2em] uppercase">Audio Mode</span>
                     </button>
+
+                    <div className="flex items-center space-x-4">
+                        <button
+                            onClick={() => {
+                                if (window.ytPlayer) {
+                                    const currentQuality = window.ytPlayer.getPlaybackQuality();
+                                    const nextQuality = currentQuality === 'hd1080' ? 'medium' : 'hd1080';
+                                    window.ytPlayer.setPlaybackQuality(nextQuality);
+                                    alert(`Quality set to ${nextQuality === 'hd1080' ? 'High Definition' : 'Standard'}`);
+                                }
+                            }}
+                            className="w-10 h-10 flex items-center justify-center bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full border border-white/10 transition-all text-[9px] font-bold tracking-tighter"
+                            title="Toggle Quality"
+                        >
+                            HD
+                        </button>
+                    </div>
                 </div>
 
                 {/* 
@@ -67,70 +84,72 @@ const VinylPlayerPage = () => {
                   transparent container via global fixed CSS (`z-[65]`), spanning `h-full`. 
                 */}
 
-                {/* The bottom controls spanning ~160px overlaying the video's bottom subtly */}
-                <div className="w-full max-w-5xl mx-auto px-8 lg:px-16 relative z-[80] pt-24 pb-12 bg-gradient-to-t from-black via-black/90 to-transparent pointer-events-auto">
-                    {/* Progress */}
-                    <div className="space-y-6 mb-10">
-                        <div
-                            className="h-1.5 bg-white/20 relative cursor-pointer group rounded-full"
-                            onClick={(e) => {
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const x = e.clientX - rect.left;
-                                seek((x / rect.width) * 100);
-                            }}
-                        >
-                            <motion.div
-                                className="absolute top-0 left-0 h-full bg-white rounded-full"
-                                style={{ width: `${progress}%` }}
-                            />
+                {/* The bottom controls - Sleeker, smaller, no heavy black background */}
+                <div className="w-full max-w-4xl mx-auto px-6 lg:px-12 relative z-[80] pb-10 mt-auto pointer-events-auto">
+                    <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
+                        {/* Progress */}
+                        <div className="space-y-4 mb-8">
                             <div
-                                className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white shadow-lg scale-0 group-hover:scale-100 transition-transform"
-                                style={{ left: `${progress}%` }}
-                            />
+                                className="h-1 bg-white/10 relative cursor-pointer group rounded-full"
+                                onClick={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const x = e.clientX - rect.left;
+                                    seek((x / rect.width) * 100);
+                                }}
+                            >
+                                <motion.div
+                                    className="absolute top-0 left-0 h-full bg-white rounded-full"
+                                    style={{ width: `${progress}%` }}
+                                />
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg scale-0 group-hover:scale-100 transition-transform"
+                                    style={{ left: `${progress}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[10px] font-mono tracking-[0.2em] text-white/40">
+                                <span>{formatTime((progress / 100) * (currentSong.duration || 0))}</span>
+                                <span>{formatTime(currentSong.duration || 0)}</span>
+                            </div>
                         </div>
-                        <div className="flex justify-between text-xs font-mono tracking-widest text-gray-400">
-                            <span>{formatTime((progress / 100) * (currentSong.duration || 0))}</span>
-                            <span>{formatTime(currentSong.duration || 0)}</span>
-                        </div>
-                    </div>
 
-                    {/* Controls Row aligned to Screenshot 2 */}
-                    <div className="flex items-center justify-between pb-6">
-                        <button
-                            onClick={toggleShuffle}
-                            className={`transition-colors ${isShuffle ? 'text-white' : 'text-gray-600 hover:text-white'}`}
-                        >
-                            <Shuffle size={20} strokeWidth={1.5} />
-                        </button>
-
-                        <div className="flex items-center space-x-12 md:space-x-16">
-                            <button onClick={previousSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
-                                <SkipBack className="w-8 h-8 md:w-9 md:h-9" fill="currentColor" strokeWidth={1} />
+                        {/* Controls Row - Smaller Buttons */}
+                        <div className="flex items-center justify-between">
+                            <button
+                                onClick={toggleShuffle}
+                                className={`transition-colors ${isShuffle ? 'text-white' : 'text-white/30 hover:text-white'}`}
+                            >
+                                <Shuffle size={18} strokeWidth={1.5} />
                             </button>
+
+                            <div className="flex items-center space-x-10 md:space-x-14">
+                                <button onClick={previousSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white/80 hover:text-white">
+                                    <SkipBack className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" strokeWidth={1} />
+                                </button>
+
+                                <button
+                                    onClick={togglePlay}
+                                    className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-xl active:scale-95"
+                                >
+                                    {isPlaying ? (
+                                        <Pause className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" strokeWidth={1} />
+                                    ) : (
+                                        <Play className="w-6 h-6 md:w-7 md:h-7 ml-1" fill="currentColor" strokeWidth={1} />
+                                    )}
+                                </button>
+
+                                <button onClick={nextSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white/80 hover:text-white">
+                                    <SkipForward className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" strokeWidth={1} />
+                                </button>
+                            </div>
 
                             <button
-                                onClick={togglePlay}
-                                className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-2xl"
+                                onClick={toggleRepeat}
+                                className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-white/30 hover:text-white'}`}
                             >
-                                {isPlaying ? (
-                                    <Pause className="w-8 h-8 md:w-10 md:h-10" fill="currentColor" strokeWidth={1} />
-                                ) : (
-                                    <Play className="w-8 h-8 md:w-10 md:h-10 ml-2" fill="currentColor" strokeWidth={1} />
-                                )}
-                            </button>
-
-                            <button onClick={nextSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
-                                <SkipForward className="w-8 h-8 md:w-9 md:h-9" fill="currentColor" strokeWidth={1} />
+                                <Repeat size={18} strokeWidth={1.5} />
+                                {repeatMode === 'one' && <span className="absolute -top-2 -right-2 text-[9px] font-bold">1</span>}
                             </button>
                         </div>
-
-                        <button
-                            onClick={toggleRepeat}
-                            className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-gray-600 hover:text-white'}`}
-                        >
-                            <Repeat size={20} strokeWidth={1.5} />
-                            {repeatMode === 'one' && <span className="absolute -top-2 -right-2 text-[10px] font-bold">1</span>}
-                        </button>
                     </div>
                 </div>
             </motion.div>

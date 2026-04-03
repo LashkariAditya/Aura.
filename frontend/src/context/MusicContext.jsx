@@ -426,6 +426,7 @@ export const MusicProvider = ({ children }) => {
                     }}
                     onReady={(event) => {
                         ytPlayerRef.current = event.target;
+                        window.ytPlayer = event.target; // Expose for quality control
                         ytPlayerRef.current.setVolume(volume);
                     }}
                     onStateChange={(event) => {
@@ -448,7 +449,7 @@ export const MusicProvider = ({ children }) => {
                         setIsLoading(false);
                         nextSong(true);
                     }}
-                    className="w-full h-[140%] translate-y-[-10%] scale-[1.2] pointer-events-none select-none"
+                    className="w-full h-[120%] md:h-[130%] translate-y-[-10%] md:translate-y-[-15%] scale-[1.1] md:scale-[1.2] pointer-events-none select-none object-cover"
                 />
 
                 {/* Physical overlay to brutally cover any remaining watermark at the bottom right */}
