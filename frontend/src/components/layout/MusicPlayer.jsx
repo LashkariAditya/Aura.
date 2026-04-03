@@ -86,7 +86,7 @@ const MusicPlayer = () => {
                                 </div>
                             )}
                         </div>
-                        <div className="min-w-0 pr-4 flex-1 overflow-hidden relative">
+                        <div className="min-w-0 flex-1 overflow-hidden relative [mask-image:linear-gradient(to_right,black_0%,black_85%,transparent_100%)]">
                             <div className="whitespace-nowrap overflow-hidden">
                                 <h4 className="inline-block font-serif text-[13px] md:text-lg leading-tight animate-marquee bg-gradient-to-r from-white/60 via-white to-white/60 bg-clip-text text-transparent opacity-90 dark:opacity-80">
                                     {currentSong.title}
