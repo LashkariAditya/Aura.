@@ -27,6 +27,50 @@ connectDB();
 
 const app = express();
 
+// ─── ROBUST CORS CONFIGURATION ───────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+    process.env.FRONTEND_URL,
+    'https://aura-music-67.vercel.app',
+    'https://aura-music.up.railway.app',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+].filter(Boolean);
+
+// 1. Manual headers (Runs first, handles pre-flight and errors)
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && (ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin) || /\.railway\.app$/.test(origin))) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (!origin) {
+        // Fallback for non-browser requests
+        res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+});
+
+// 2. Standard CORS middleware (Redundancy)
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin) || /\.railway\.app$/.test(origin)) {
+            callback(null, true);
+        } else {
+            callback(null, new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus: 204
+}));
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -74,51 +118,7 @@ app.use(helmet({
         }
     }
 }));
-// ─── CORS: set headers on EVERY response (including errors) ───────────────────
-const ALLOWED_ORIGINS = [
-    process.env.FRONTEND_URL,          // e.g. https://aura-music-67.vercel.app
-    'https://aura-music-67.vercel.app', // explicit production fallback
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-].filter(Boolean);
-
-// Manual early middleware — runs before Helmet/routes so error paths also get headers
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    const isAllowed =
-        !origin ||
-        ALLOWED_ORIGINS.includes(origin) ||
-        /\.vercel\.app$/.test(origin) ||
-        /\.railway\.app$/.test(origin);
-
-    if (isAllowed && origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Vary', 'Origin');
-    }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
-
-    // Handle preflight immediately
-    if (req.method === 'OPTIONS') {
-        return res.status(204).end();
-    }
-    next();
-});
-
-app.use(cors({
-    origin: (origin, callback) => {
-        const isAllowed =
-            !origin ||
-            ALLOWED_ORIGINS.includes(origin) ||
-            /\.vercel\.app$/.test(origin) ||
-            /\.railway\.app$/.test(origin);
-        callback(null, isAllowed);
-    },
-    credentials: true,
-    optionsSuccessStatus: 204,
-}));
+// CORS remains handled at the top
 app.use(compression());
 
 // Routes mapping
