@@ -42,9 +42,11 @@ app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin && (ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin) || /\.railway\.app$/.test(origin))) {
         res.setHeader('Access-Control-Allow-Origin', origin);
+        console.log(`[CORS] Allowed origin: ${origin} for path: ${req.path}`);
     } else if (!origin) {
-        // Fallback for non-browser requests
         res.setHeader('Access-Control-Allow-Origin', '*');
+    } else {
+        console.warn(`[CORS] Blocked origin: ${origin} for path: ${req.path}`);
     }
     
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
@@ -129,6 +131,11 @@ app.use('/api/history', historyRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/artists', artistRoutes);
 app.use('/api/youtube', youtubeRoutes);
+
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString(), env: process.env.NODE_ENV });
+});
 
 // Google Drive Auth Routes
 app.get('/auth/google', async (req, res) => {
@@ -229,14 +236,7 @@ const PORT = process.env.PORT || 5000;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: (origin, callback) => {
-            const isAllowed =
-                !origin ||
-                ALLOWED_ORIGINS.includes(origin) ||
-                /\.vercel\.app$/.test(origin) ||
-                /\.railway\.app$/.test(origin);
-            callback(null, isAllowed);
-        },
+        origin: true, // Be as permissive as possible for Socket.io
         credentials: true,
     }
 });
