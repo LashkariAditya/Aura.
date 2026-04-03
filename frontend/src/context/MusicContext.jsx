@@ -401,7 +401,7 @@ export const MusicProvider = ({ children }) => {
             <div
                 className={
                     isVideoMode && isYtRef.current
-                        ? "fixed top-0 left-0 w-full h-screen z-[65] bg-black transition-all duration-500 overflow-hidden flex items-center justify-center pointer-events-none"
+                        ? "fixed inset-0 z-[65] bg-black overflow-hidden flex items-center justify-center pointer-events-none"
                         : "fixed overflow-hidden opacity-0 pointer-events-none w-0 h-0"
                 }
                 style={!isVideoMode ? { zIndex: -9999 } : {}}
@@ -421,7 +421,8 @@ export const MusicProvider = ({ children }) => {
                             modestbranding: 1,
                             enablejsapi: 1,
                             origin: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173',
-                            widget_referrer: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
+                            widget_referrer: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173',
+                            vq: 'hd1080'
                         },
                     }}
                     onReady={(event) => {
@@ -449,7 +450,7 @@ export const MusicProvider = ({ children }) => {
                         setIsLoading(false);
                         nextSong(true);
                     }}
-                    className="w-full h-[120%] md:h-[130%] translate-y-[-10%] md:translate-y-[-15%] scale-[1.1] md:scale-[1.2] pointer-events-none select-none object-cover"
+                    className="w-full h-full pointer-events-none select-none"
                 />
 
                 {/* Physical overlay to brutally cover any remaining watermark at the bottom right */}
