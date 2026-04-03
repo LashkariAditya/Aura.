@@ -86,9 +86,17 @@ const MusicPlayer = () => {
                                 </div>
                             )}
                         </div>
-                        <div className="min-w-0 pr-2 md:pr-4 truncate">
-                            <h4 className="font-serif text-[13px] md:text-lg leading-tight truncate group-hover:text-foreground transition-colors">{currentSong.title}</h4>
-                            <p className="text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-[2px] font-medium truncate font-sans">{currentSong.artist}</p>
+                        <div className="min-w-0 pr-2 md:pr-4 flex-1 overflow-hidden relative">
+                            <div className="whitespace-nowrap overflow-hidden group/marquee">
+                                <h4 className="inline-block font-serif text-[13px] md:text-lg leading-tight group-hover/marquee:animate-marquee">
+                                    {currentSong.title}
+                                    {/* Duplicate title for seamless scroll if it's long - can also be done via JS, but this is a nice trick */}
+                                    <span className="inline-block md:hidden mx-8">{currentSong.title}</span>
+                                </h4>
+                            </div>
+                            <p className="text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-foreground/50 mt-[2px] font-medium truncate font-sans">
+                                {currentSong.artist}
+                            </p>
                         </div>
                     </div>
 
