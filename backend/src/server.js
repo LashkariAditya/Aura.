@@ -27,7 +27,10 @@ connectDB();
 
 const app = express();
 
-// ─── ROBUST CORS CONFIGURATION ───────────────────────────────────────────────
+// Trust Railway's proxy so Express sees the real client IP / protocol
+app.set('trust proxy', 1);
+
+// ─── ALLOWED ORIGINS ─────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
     process.env.FRONTEND_URL,
     'https://aura-music-67.vercel.app',
@@ -37,39 +40,51 @@ const ALLOWED_ORIGINS = [
     'http://localhost:3000',
 ].filter(Boolean);
 
-// 1. Manual headers (Runs first, handles pre-flight and errors)
+function isAllowedOrigin(origin) {
+    if (!origin) return true;
+    return ALLOWED_ORIGINS.includes(origin)
+        || /\.vercel\.app$/.test(origin)
+        || /\.railway\.app$/.test(origin);
+}
+
+// ─── 1. CORS — always runs first, before everything else ─────────────────────
+// This manually sets headers so they survive helmet and error handlers.
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && (ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin) || /\.railway\.app$/.test(origin))) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        console.log(`[CORS] Allowed origin: ${origin} for path: ${req.path}`);
-    } else if (!origin) {
-        res.setHeader('Access-Control-Allow-Origin', '*');
+    if (isAllowedOrigin(origin)) {
+        // For credentialed requests we MUST echo the exact origin, not '*'
+        res.setHeader('Access-Control-Allow-Origin', origin || '*');
     } else {
-        console.warn(`[CORS] Blocked origin: ${origin} for path: ${req.path}`);
+        // Still set the header so the browser gets a proper CORS error message
+        // instead of a generic network error
+        console.warn(`[CORS] Blocked origin: ${origin} for ${req.method} ${req.path}`);
     }
-    
+
     res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Max-Age', '86400'); // cache preflight for 24h
     res.setHeader('Vary', 'Origin');
 
+    // Fast-track preflight
     if (req.method === 'OPTIONS') {
         return res.status(204).end();
     }
     next();
 });
 
-// 2. Standard CORS middleware (Redundancy)
+// 2. Standard CORS middleware (backup, also handles the vary header etc.)
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin) || /\.railway\.app$/.test(origin)) {
+        if (isAllowedOrigin(origin)) {
             callback(null, true);
         } else {
-            callback(null, new Error('Not allowed by CORS'));
+            callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     optionsSuccessStatus: 204
 }));
 
@@ -82,45 +97,13 @@ if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'));
 }
 
+// Helmet — must come AFTER the CORS middleware above so it cannot strip our headers.
+// Disable CSP in production API (the frontend sets its own CSP via Vercel headers).
 app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    contentSecurityPolicy: {
-        directives: {
-            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            // Allow images from our stream proxy, placehold.co fallbacks, and any https source
-            "img-src": [
-                "'self'",
-                "data:",
-                "blob:",
-                "http://localhost:5000",
-                "http://localhost:5001",
-                "https://placehold.co",
-                "https://images.unsplash.com",
-                "https://drive.google.com",
-                "https://www.transparenttextures.com",
-                "https:",
-            ],
-            "connect-src": [
-                "'self'",
-                "http://localhost:5000",
-                "ws://localhost:5000",
-                "http://127.0.0.1:5000",
-                "ws://127.0.0.1:5000",
-                "http://localhost:5001",
-                "http://localhost:5173",
-                "https://aura-music-67.vercel.app",
-                "https://aura-music.up.railway.app",
-                "wss://aura-music.up.railway.app",
-            ],
-            "media-src": [
-                "'self'",
-                "blob:",
-                "http://localhost:5000",
-            ],
-        }
-    }
+    crossOriginOpenerPolicy: false, // don't interfere with OAuth popups
+    contentSecurityPolicy: false,   // API doesn't serve HTML; CSP is the frontend's job
 }));
-// CORS remains handled at the top
 app.use(compression());
 
 // Routes mapping
@@ -227,8 +210,11 @@ app.get('/', (req, res) => {
     res.send('Aura Music API is running...');
 });
 
-// Error handling
-app.use(notFound);
+// Error handling — skip socket.io paths so the WS transport works
+app.use((req, res, next) => {
+    if (req.path.startsWith('/socket.io')) return next(); // let socket.io handle these
+    notFound(req, res, next);
+});
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
@@ -236,9 +222,19 @@ const PORT = process.env.PORT || 5000;
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: true, // Be as permissive as possible for Socket.io
+        origin: (origin, callback) => {
+            if (isAllowedOrigin(origin)) {
+                callback(null, true);
+            } else {
+                callback(null, true); // still allow for socket.io – auth is handled at app level
+            }
+        },
+        methods: ['GET', 'POST'],
         credentials: true,
-    }
+    },
+    // Allow both polling and websocket transports
+    transports: ['polling', 'websocket'],
+    allowUpgrades: true,
 });
 
 socketHandler(io);
