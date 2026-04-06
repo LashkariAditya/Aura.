@@ -34,6 +34,7 @@ app.set('trust proxy', 1);
 const ALLOWED_ORIGINS = [
     process.env.FRONTEND_URL,
     'https://aura-music-67.vercel.app',
+    'https://aura-production-ff01.up.railway.app',
     'https://aura-music.up.railway.app',
     'http://localhost:5173',
     'http://localhost:5174',
