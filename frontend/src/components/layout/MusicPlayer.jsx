@@ -48,7 +48,7 @@ const MusicPlayer = () => {
             initial={{ y: 100 }}
             animate={{ y: 0 }}
             onClick={handlePlayerClick}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 md:bg-background/80 backdrop-blur-3xl border-t border-border px-3 md:px-8 h-[56px] md:h-24 flex items-center cursor-pointer group/player shadow-[0_-10px_30px_rgba(0,0,0,0.1)] md:shadow-none"
+            className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 md:bg-background/80 backdrop-blur-3xl border-t border-white/5 md:border-border px-3 md:px-8 h-[56px] md:h-24 flex items-center cursor-pointer group/player shadow-[0_-10px_30px_rgba(0,0,0,0.5)] md:shadow-none"
         >
 
             <div className="max-w-[1920px] mx-auto w-full flex items-center justify-between md:grid md:grid-cols-3 gap-2 md:gap-4 relative">
@@ -86,16 +86,9 @@ const MusicPlayer = () => {
                                 </div>
                             )}
                         </div>
-                        <div className="min-w-0 flex-1 overflow-hidden relative [mask-image:linear-gradient(to_right,black_0%,black_85%,transparent_100%)]">
-                            <div className="whitespace-nowrap overflow-hidden">
-                                <h4 className="inline-block font-serif text-[13px] md:text-lg leading-tight animate-marquee bg-gradient-to-r from-white/60 via-white to-white/60 bg-clip-text text-transparent opacity-90 dark:opacity-80">
-                                    {currentSong.title}
-                                    <span className="inline-block mx-12">{currentSong.title}</span>
-                                </h4>
-                            </div>
-                            <p className="text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-foreground/40 mt-[2px] font-medium truncate font-sans">
-                                {currentSong.artist}
-                            </p>
+                        <div className="min-w-0 pr-2 md:pr-4 truncate">
+                            <h4 className="font-serif text-[13px] md:text-lg leading-tight truncate group-hover:text-foreground transition-colors">{currentSong.title}</h4>
+                            <p className="text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-[2px] font-medium truncate font-sans">{currentSong.artist}</p>
                         </div>
                     </div>
 
@@ -104,7 +97,7 @@ const MusicPlayer = () => {
                             e.stopPropagation();
                             toggleLike(currentSong._id);
                         }}
-                        className={`hidden md:block transition-colors relative z-10 shrink-0 ${isLiked(currentSong._id) ? 'text-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+                        className={`hidden md:block transition-colors relative z-10 shrink-0 ${isLiked(currentSong._id) ? 'text-foreground' : 'text-gray-300 hover:text-foreground'}`}
                     >
                         <Heart
                             size={16}
@@ -129,14 +122,14 @@ const MusicPlayer = () => {
 
                         <button
                             onClick={(e) => { e.stopPropagation(); toggleShuffle(); }}
-                            className={`hidden md:block transition-colors ${isShuffle ? 'text-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+                            className={`hidden md:block transition-colors ${isShuffle ? 'text-foreground' : 'text-gray-300 hover:text-foreground'}`}
                         >
                             <Shuffle size={16} />
                         </button>
 
                         <button
                             onClick={(e) => { e.stopPropagation(); previousSong(); }}
-                            className="hidden md:block text-foreground/60 hover:text-foreground transition-colors p-1"
+                            className="hidden md:block text-gray-300 hover:text-foreground transition-colors p-1"
                         >
                             <SkipBack className="w-6 h-6" fill="currentColor" strokeWidth={1} />
                         </button>
@@ -154,14 +147,14 @@ const MusicPlayer = () => {
 
                         <button
                             onClick={(e) => { e.stopPropagation(); nextSong(); }}
-                            className="text-foreground/60 hover:text-foreground transition-colors p-2"
+                            className="text-gray-300 hover:text-foreground transition-colors p-2"
                         >
                             <SkipForward className="w-6 h-6 md:w-6 md:h-6" fill="currentColor" strokeWidth={1} />
                         </button>
 
                         <button
                             onClick={(e) => { e.stopPropagation(); toggleRepeat(); }}
-                            className={`hidden md:block transition-colors relative p-1 ${repeatMode !== 'off' ? 'text-foreground' : 'text-foreground/40 hover:text-foreground'}`}
+                            className={`hidden md:block transition-colors relative p-1 ${repeatMode !== 'off' ? 'text-foreground' : 'text-gray-300 hover:text-foreground'}`}
                         >
                             <Repeat size={16} />
                             {repeatMode === 'one' && <span className="absolute -top-1.5 -right-1.5 text-[8px] font-bold">1</span>}
@@ -198,7 +191,7 @@ const MusicPlayer = () => {
                 {/* Additional Actions */}
                 <div className="hidden md:flex items-center justify-end space-x-8 min-w-0 pr-2">
                     <div className="flex items-center space-x-4 group w-32 shrink-0">
-                        <Volume2 size={16} className="text-foreground/40 group-hover:text-foreground transition-colors" />
+                        <Volume2 size={16} className="text-gray-300 group-hover:text-foreground transition-colors" />
                         <div className="flex-1 h-[1px] bg-border relative cursor-pointer"
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -219,14 +212,14 @@ const MusicPlayer = () => {
                             e.stopPropagation();
                             setIsQueueOpen(true);
                         }}
-                        className="text-foreground/40 hover:text-foreground transition-colors shrink-0 p-2"
+                        className="text-gray-300 hover:text-foreground transition-colors shrink-0 p-2"
                     >
                         <ListMusic size={16} />
                     </button>
 
                     <Link
                         to="/player"
-                        className="text-foreground/40 hover:text-foreground transition-colors shrink-0 p-2"
+                        className="text-gray-300 hover:text-foreground transition-colors shrink-0 p-2"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <Maximize2 size={16} />

@@ -49,7 +49,7 @@ function isAllowedOrigin(origin) {
 }
 
 // ─── 1. CORS — always runs first, before everything else ─────────────────────
-// This manually sets headers so they survive helmet and error handlers.
+// This manually sets headers so they survive helmet and error handlers. 
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (isAllowedOrigin(origin)) {
