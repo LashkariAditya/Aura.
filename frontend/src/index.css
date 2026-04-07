@@ -204,3 +204,19 @@ html {
 .dark .custom-cursor-trail {
   background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255, 255, 255, 0.08) 0%, transparent 20%);
 }
+
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 15s linear infinite;
+  padding-right: 2rem;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}

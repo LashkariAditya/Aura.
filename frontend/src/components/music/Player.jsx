@@ -52,19 +52,21 @@ const Player = () => {
                             className={`w-full h-full object-cover grayscale transition-all duration-700 group-hover:grayscale-0 group-hover:scale-110 ${isPlaying ? 'grayscale-0' : ''}`}
                         />
                     </div>
-                    <div className="min-w-0">
-                        <h4
-                            className={`font-serif ${titleSize} leading-tight group-hover:text-black transition-colors truncate`}
-                            title={currentSong.title}
-                        >
-                            {currentSong.title}
-                        </h4>
-                        <p
-                            className="text-[8px] md:text-[9px] uppercase tracking-[0.3em] text-gray-400 mt-1 font-medium truncate"
-                            title={currentSong.artist}
-                        >
-                            {currentSong.artist}
-                        </p>
+                    <div className="min-w-0 flex-1 overflow-hidden relative">
+                        <div className="animate-marquee">
+                            <h4
+                                className={`font-serif ${titleSize} leading-tight group-hover:text-black transition-colors`}
+                                title={currentSong.title}
+                            >
+                                {currentSong.title}
+                            </h4>
+                            <p
+                                className="text-[8px] md:text-[9px] uppercase tracking-[0.3em] text-gray-400 mt-1 font-medium"
+                                title={currentSong.artist}
+                            >
+                                {currentSong.artist}
+                            </p>
+                        </div>
                     </div>
                 </Link>
 
