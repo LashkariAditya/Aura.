@@ -42,7 +42,7 @@ const VinylPlayerPage = () => {
         if (hideTimer.current) clearTimeout(hideTimer.current);
         hideTimer.current = setTimeout(() => {
             setShowControls(false);
-        }, 1000);
+        }, 3000);
     };
 
     useEffect(() => {
@@ -93,70 +93,72 @@ const VinylPlayerPage = () => {
                   transparent container via global fixed CSS (`z-[65]`), spanning `h-full`. 
                 */}
 
-                {/* The bottom controls spanning ~80px overlaying the video's bottom subtly */}
-                <div className={`w-full max-w-4xl mx-auto px-6 lg:px-10 relative z-[80] pt-12 pb-6 bg-gradient-to-t from-black via-black/80 to-transparent ${showControls ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-                    {/* Progress */}
-                    <div className="space-y-3 mb-5">
-                        <div
-                            className="h-1 bg-white/20 relative cursor-pointer group rounded-full"
-                            onClick={(e) => {
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const x = e.clientX - rect.left;
-                                seek((x / rect.width) * 100);
-                            }}
-                        >
-                            <motion.div
-                                className="absolute top-0 left-0 h-full bg-white rounded-full"
-                                style={{ width: `${progress}%` }}
-                            />
+                {/* The bottom controls subtly overlaying the video */}
+                <div className={`w-full relative z-[80] pt-24 pb-8 px-6 lg:px-10 bg-gradient-to-t from-black/90 via-black/50 to-transparent ${showControls ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+                    <div className="w-full max-w-3xl mx-auto">
+                        {/* Progress */}
+                        <div className="space-y-2 mb-4">
                             <div
-                                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg scale-0 group-hover:scale-100 transition-transform"
-                                style={{ left: `${progress}%` }}
-                            />
+                                className="h-[2px] bg-white/20 relative cursor-pointer group rounded-full"
+                                onClick={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const x = e.clientX - rect.left;
+                                    seek((x / rect.width) * 100);
+                                }}
+                            >
+                                <motion.div
+                                    className="absolute top-0 left-0 h-full bg-white rounded-full"
+                                    style={{ width: `${progress}%` }}
+                                />
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-lg scale-0 group-hover:scale-100 transition-transform"
+                                    style={{ left: `${progress}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[9px] font-mono tracking-widest text-gray-300">
+                                <span>{formatTime((progress / 100) * (currentSong.duration || 0))}</span>
+                                <span>{formatTime(currentSong.duration || 0)}</span>
+                            </div>
                         </div>
-                        <div className="flex justify-between text-[10px] font-mono tracking-widest text-gray-300">
-                            <span>{formatTime((progress / 100) * (currentSong.duration || 0))}</span>
-                            <span>{formatTime(currentSong.duration || 0)}</span>
-                        </div>
-                    </div>
 
-                    {/* Controls Row aligned to Screenshot 2 */}
-                    <div className="flex items-center justify-between pb-2">
-                        <button
-                            onClick={toggleShuffle}
-                            className={`transition-colors ${isShuffle ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                        >
-                            <Shuffle size={16} strokeWidth={1.5} />
-                        </button>
-
-                        <div className="flex items-center space-x-10 md:space-x-14">
-                            <button onClick={previousSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
-                                <SkipBack className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" strokeWidth={1} />
+                        {/* Controls Row aligned to Screenshot 2 */}
+                        <div className="flex items-center justify-between pb-2">
+                            <button
+                                onClick={toggleShuffle}
+                                className={`transition-colors ${isShuffle ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                <Shuffle size={14} strokeWidth={1.5} />
                             </button>
+
+                            <div className="flex items-center space-x-8 md:space-x-12">
+                                <button onClick={previousSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
+                                    <SkipBack className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" strokeWidth={1} />
+                                </button>
+
+                                <button
+                                    onClick={togglePlay}
+                                    className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-xl"
+                                >
+                                    {isPlaying ? (
+                                        <Pause className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" strokeWidth={1} />
+                                    ) : (
+                                        <Play className="w-4 h-4 md:w-5 md:h-5 ml-1" fill="currentColor" strokeWidth={1} />
+                                    )}
+                                </button>
+
+                                <button onClick={nextSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
+                                    <SkipForward className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" strokeWidth={1} />
+                                </button>
+                            </div>
 
                             <button
-                                onClick={togglePlay}
-                                className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-all shadow-xl"
+                                onClick={toggleRepeat}
+                                className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
                             >
-                                {isPlaying ? (
-                                    <Pause className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" strokeWidth={1} />
-                                ) : (
-                                    <Play className="w-6 h-6 md:w-7 md:h-7 ml-1" fill="currentColor" strokeWidth={1} />
-                                )}
-                            </button>
-
-                            <button onClick={nextSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
-                                <SkipForward className="w-6 h-6 md:w-7 md:h-7" fill="currentColor" strokeWidth={1} />
+                                <Repeat size={14} strokeWidth={1.5} />
+                                {repeatMode === 'one' && <span className="absolute -top-1 -right-1 text-[8px] font-bold">1</span>}
                             </button>
                         </div>
-
-                        <button
-                            onClick={toggleRepeat}
-                            className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                        >
-                            <Repeat size={16} strokeWidth={1.5} />
-                            {repeatMode === 'one' && <span className="absolute -top-1 -right-1 text-[8px] font-bold">1</span>}
-                        </button>
                     </div>
                 </div>
             </motion.div>
