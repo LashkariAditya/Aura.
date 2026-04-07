@@ -448,7 +448,7 @@ export const MusicProvider = ({ children }) => {
                         setIsLoading(false);
                         nextSong(true);
                     }}
-                    className="w-full h-[140%] translate-y-[-10%] scale-[1.2] pointer-events-none select-none"
+                    className="w-full h-full pointer-events-none select-none flex items-center justify-center"
                 />
 
                 {/* Physical overlay to brutally cover any remaining watermark at the bottom right */}
