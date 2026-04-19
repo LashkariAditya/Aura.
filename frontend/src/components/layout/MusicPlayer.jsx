@@ -51,7 +51,7 @@ const MusicPlayer = () => {
             className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 md:bg-background/80 backdrop-blur-3xl border-t border-white/5 md:border-border px-3 md:px-8 h-[56px] md:h-24 flex items-center cursor-pointer group/player shadow-[0_-10px_30px_rgba(0,0,0,0.5)] md:shadow-none"
         >
 
-            <div className="max-w-[1920px] mx-auto w-full flex items-center justify-between md:grid md:grid-cols-3 gap-2 md:gap-4 relative">
+            <div className="max-w-[1920px] mx-auto w-full grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-4 relative overflow-hidden">
 
                 {/* Mobile absolute progress bar */}
                 <div className="absolute -top-[1px] md:hidden left-0 right-0 h-[2px] bg-white/5 cursor-pointer group"
@@ -68,8 +68,8 @@ const MusicPlayer = () => {
                 </div>
 
                 {/* Song Info */}
-                <div className="flex items-center space-x-3 md:space-x-6 flex-1 min-w-0 pr-2 md:pr-0">
-                    <div className="flex items-center space-x-3 md:space-x-5 group player-info-zone cursor-pointer flex-1 min-w-0">
+                <div className="flex items-center space-x-3 md:space-x-6 flex-1 min-w-0 pr-4 overflow-hidden">
+                    <div className="flex items-center space-x-3 md:space-x-5 group player-info-zone cursor-pointer min-w-0 flex-1">
                         <div className="w-9 h-9 md:w-14 md:h-14 bg-muted overflow-hidden relative shadow-sm shrink-0 rounded-md md:rounded-none">
                             <img
                                 src={currentSong.coverUrl}
@@ -86,12 +86,12 @@ const MusicPlayer = () => {
                                 </div>
                             )}
                         </div>
-                        <div className="min-w-0 flex-1 mini-player-mask overflow-hidden">
-                            <div className="animate-marquee-premium w-max">
-                                <h4 className="font-serif text-[13px] md:text-lg leading-tight group-hover:text-foreground transition-colors inline-block pr-12">
+                        <div className="min-w-0 flex-1 mini-player-mask">
+                            <div className="animate-marquee-premium">
+                                <h4 className="font-serif text-[13px] md:text-lg leading-tight group-hover:text-foreground transition-colors shrink-0">
                                     {currentSong.title}
                                 </h4>
-                                <h4 className="font-serif text-[13px] md:text-lg leading-tight group-hover:text-foreground transition-colors inline-block pr-12">
+                                <h4 className="font-serif text-[13px] md:text-lg leading-tight group-hover:text-foreground transition-colors shrink-0" aria-hidden="true">
                                     {currentSong.title}
                                 </h4>
                             </div>

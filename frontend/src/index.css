@@ -212,9 +212,10 @@ html {
 }
 
 .animate-marquee-premium {
-  display: inline-block;
-  animation: marquee-premium 20s linear infinite;
-  white-space: nowrap;
+  display: flex;
+  width: max-content;
+  animation: marquee-premium 25s linear infinite;
+  gap: 3rem;
 }
 
 .animate-marquee-premium:hover {
@@ -223,17 +224,16 @@ html {
 
 .mini-player-mask {
   mask-image: linear-gradient(to right, 
-    transparent 0%, 
-    black 5%, 
-    black 85%, 
+    black 0%, 
+    black 80%, 
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(to right, 
-    transparent 0%, 
-    black 5%, 
-    black 85%, 
+    black 0%, 
+    black 80%, 
     transparent 100%
   );
+  overflow: hidden;
 }
 
 /* Electron Draggable Regions */
