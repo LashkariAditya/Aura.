@@ -205,18 +205,42 @@ html {
   background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255, 255, 255, 0.08) 0%, transparent 20%);
 }
 
-@keyframes marquee {
-  0% { transform: translateX(100%); }
-  100% { transform: translateX(-100%); }
+/* Marquee Animations */
+@keyframes marquee-premium {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
-.animate-marquee {
+.animate-marquee-premium {
   display: inline-block;
+  animation: marquee-premium 20s linear infinite;
   white-space: nowrap;
-  animation: marquee 15s linear infinite;
-  padding-right: 2rem;
 }
 
-.animate-marquee:hover {
+.animate-marquee-premium:hover {
   animation-play-state: paused;
+}
+
+.mini-player-mask {
+  mask-image: linear-gradient(to right, 
+    transparent 0%, 
+    black 5%, 
+    black 85%, 
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(to right, 
+    transparent 0%, 
+    black 5%, 
+    black 85%, 
+    transparent 100%
+  );
+}
+
+/* Electron Draggable Regions */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
 }

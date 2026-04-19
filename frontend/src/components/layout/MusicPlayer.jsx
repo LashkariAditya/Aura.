@@ -69,7 +69,7 @@ const MusicPlayer = () => {
 
                 {/* Song Info */}
                 <div className="flex items-center space-x-3 md:space-x-6 flex-1 min-w-0 pr-2 md:pr-0">
-                    <div className="flex items-center space-x-3 md:space-x-5 group player-info-zone cursor-pointer shrink-0 min-w-0">
+                    <div className="flex items-center space-x-3 md:space-x-5 group player-info-zone cursor-pointer flex-1 min-w-0">
                         <div className="w-9 h-9 md:w-14 md:h-14 bg-muted overflow-hidden relative shadow-sm shrink-0 rounded-md md:rounded-none">
                             <img
                                 src={currentSong.coverUrl}
@@ -86,8 +86,15 @@ const MusicPlayer = () => {
                                 </div>
                             )}
                         </div>
-                        <div className="min-w-0 pr-2 md:pr-4 truncate">
-                            <h4 className="font-serif text-[13px] md:text-lg leading-tight truncate group-hover:text-foreground transition-colors">{currentSong.title}</h4>
+                        <div className="min-w-0 flex-1 mini-player-mask overflow-hidden">
+                            <div className="animate-marquee-premium w-max">
+                                <h4 className="font-serif text-[13px] md:text-lg leading-tight group-hover:text-foreground transition-colors inline-block pr-12">
+                                    {currentSong.title}
+                                </h4>
+                                <h4 className="font-serif text-[13px] md:text-lg leading-tight group-hover:text-foreground transition-colors inline-block pr-12">
+                                    {currentSong.title}
+                                </h4>
+                            </div>
                             <p className="text-[9px] md:text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-[2px] font-medium truncate font-sans">{currentSong.artist}</p>
                         </div>
                     </div>
