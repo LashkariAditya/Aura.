@@ -20,7 +20,7 @@ function createWindow() {
 
   // Load the app
   if (isDev) {
-    win.loadURL('http://localhost:5173'); // Vite's default port
+    win.loadURL('http://localhost:3000'); // Port 3000 is required by Kinde auth
     win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, 'dist/index.html'));
