@@ -20,7 +20,7 @@ import artistRoutes from './routes/artistRoutes.js';
 import youtubeRoutes from './routes/youtubeRoutes.js';
 import socketHandler from './utils/socketHandler.js';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 // Connect to database
 connectDB();
@@ -126,27 +126,30 @@ app.get('/auth/google', async (req, res) => {
     const { google } = await import('googleapis');
     const oauth2Client = new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET,
-        process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/oauth2callback'
+        process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5001/oauth2callback'
     );
     const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
         prompt: 'consent',
-        scope: ['https://www.googleapis.com/auth/drive.file']
+        scope: ['https://www.googleapis.com/auth/drive.readonly']
     });
     res.redirect(url);
 });
 
 app.get('/oauth2callback', async (req, res) => {
     try {
+        console.log('[AUTH] Received OAuth2 callback');
         const { google } = await import('googleapis');
         const fs = await import('fs');
         const path = await import('path');
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET,
-            process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/oauth2callback'
+            process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5001/oauth2callback'
         );
         const { tokens } = await oauth2Client.getToken(req.query.code);
-        fs.writeFileSync(path.join(process.cwd(), 'tokens.json'), JSON.stringify(tokens, null, 2));
+        const tokenPath = path.join(process.cwd(), 'tokens.json');
+        fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
+        console.log('[AUTH] Tokens saved to:', tokenPath);
 
         // Let's also update the in-memory drive instance
         const { loadCredentials } = await import('./config/googleDrive.js');
@@ -154,6 +157,7 @@ app.get('/oauth2callback', async (req, res) => {
 
         res.send('✅ Google Drive tokens updated! You can close this window and refresh the site. Songs should play now.');
     } catch (err) {
+        console.error('[AUTH] Error saving tokens:', err.message);
         res.status(500).send('Error saving tokens: ' + err.message);
     }
 });
@@ -188,7 +192,7 @@ app.get('/api/test-google-api', async (req, res) => {
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID,
             process.env.GOOGLE_CLIENT_SECRET,
-            process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/oauth2callback'
+            process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5001/oauth2callback'
         );
         const tokens = JSON.parse(process.env.GOOGLE_DRIVE_TOKENS);
         oauth2Client.setCredentials(tokens);
@@ -218,7 +222,7 @@ app.use((req, res, next) => {
 });
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -240,6 +244,25 @@ const io = new Server(httpServer, {
 
 socketHandler(io);
 
-httpServer.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
     console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+});
+
+// Increase timeouts for heavy image/video streaming and prevent premature resets
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+    console.error(`[FATAL] Unhandled Rejection: ${err?.message || err}`);
+    if (err?.stack) console.error(err.stack);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error(`[FATAL] Uncaught Exception: ${err?.message || err}`);
+    if (err?.stack) console.error(err.stack);
+    if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+    }
 });

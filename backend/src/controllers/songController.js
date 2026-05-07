@@ -6,6 +6,55 @@ import { drive, loadCredentials } from '../config/googleDrive.js';
 import { normalizeSong, normalizeSongs } from '../utils/coverUrlHelper.js';
 import axios from 'axios';
 
+// ── In-memory image cache to prevent Google Drive API flooding ──────────────
+const _imageCache = new Map();
+const _imagePending = new Map();
+const IMAGE_CACHE_MAX = 300;
+const IMAGE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function getCachedImage(fileId) {
+    const entry = _imageCache.get(fileId);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > IMAGE_CACHE_TTL) {
+        _imageCache.delete(fileId);
+        return null;
+    }
+    return entry;
+}
+
+function setCachedImage(fileId, buffer, mimeType) {
+    if (_imageCache.size >= IMAGE_CACHE_MAX) {
+        const oldest = _imageCache.keys().next().value;
+        _imageCache.delete(oldest);
+    }
+    _imageCache.set(fileId, { data: buffer, mimeType, ts: Date.now() });
+}
+
+async function fetchImageBuffer(fileId) {
+    if (!drive) loadCredentials();
+
+    let mimeType = 'image/jpeg';
+    const song = await Song.findOne({ cloudinaryCoverId: fileId }).select('coverMimeType').lean();
+    if (song?.coverMimeType) {
+        mimeType = song.coverMimeType;
+    } else {
+        const artist = await Artist.findOne({ cloudinaryPhotoId: fileId }).select('photoUrl').lean();
+        if (!artist) {
+            try {
+                const meta = await drive.files.get({ fileId, fields: 'mimeType' });
+                mimeType = meta.data.mimeType || mimeType;
+            } catch {} // ignore metadata fetch failures
+        }
+    }
+
+    const driveRes = await drive.files.get(
+        { fileId, alt: 'media' },
+        { responseType: 'arraybuffer', timeout: 15000 }
+    );
+
+    return { data: Buffer.from(driveRes.data), mimeType };
+}
+
 // @desc    Get all songs (paginated)
 // @route   GET /api/songs
 // @access  Public
@@ -193,7 +242,7 @@ export const incrementSongPlays = async (req, res) => {
 
     if (song) {
         await song.incrementPlays();
-        res.json({ success: true, data: { plays: song.likes } });
+        res.json({ success: true, data: { plays: song.plays } });
     } else {
         res.status(404).json({ message: 'Song not found' });
     }
@@ -232,26 +281,25 @@ export const getRandomSongs = async (req, res) => {
 export const getGoogleDriveStream = async (req, res) => {
     const fileId = req.params.fileId;
 
-    // ── CORS + caching headers (set early, before any async work) ──────────
+    // ── CORS + caching headers ──────────
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Accept-Ranges', 'bytes');
     res.removeHeader('X-Frame-Options');
 
-    // Handle CORS preflight
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(204);
-    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
 
     try {
-        // ── 1. Resolve metadata from DB (fast path) ──────────────────────────
-        let size, mimeType;
+        if (!drive) loadCredentials();
 
+        // 1. Resolve metadata
+        let size, mimeType;
         const song = await Song.findOne({
             $or: [{ cloudinaryAudioId: fileId }, { cloudinaryCoverId: fileId }]
-        }).select('audioSize audioMimeType coverSize coverMimeType cloudinaryAudioId cloudinaryCoverId').lean();
+        }).select('audioSize audioMimeType coverSize coverMimeType cloudinaryAudioId').lean();
 
         if (song) {
             if (song.cloudinaryAudioId === fileId) {
@@ -263,187 +311,160 @@ export const getGoogleDriveStream = async (req, res) => {
             }
         }
 
-        // ── 2. Fallback: ask Drive API (only if not in DB) ───────────────────
         if (!size || !mimeType) {
             try {
-                loadCredentials();
                 const meta = await drive.files.get({ fileId, fields: 'size,mimeType' });
                 size = parseInt(meta.data.size) || undefined;
                 mimeType = meta.data.mimeType || 'application/octet-stream';
             } catch (metaErr) {
-                console.error('META_DRIVE_OAUTH_FAILED:', metaErr.message);
-                // Can't get size, skip ranges
+                console.error('META_FETCH_FAILED:', metaErr.message);
             }
         }
 
         res.setHeader('Content-Type', mimeType || 'application/octet-stream');
 
-        // ── 3. Handle HTTP Range requests (crucial for streaming) ────────────
+        // 2. Handle Range requests
         const rangeHeader = req.headers['range'];
-
         if (rangeHeader && size) {
             const parts = rangeHeader.replace(/bytes=/, "").split("-");
             const start = parseInt(parts[0], 10);
             let end = parts[1] ? parseInt(parts[1], 10) : size - 1;
 
             if (start >= size) {
-                res.writeHead(416, {
-                    'Content-Range': `bytes */${size}`,
-                    'Content-Type': mimeType
-                });
+                res.writeHead(416, { 'Content-Range': `bytes */${size}` });
                 return res.end();
             }
 
-            if (end >= size) {
-                end = size - 1;
-            }
-
+            if (end >= size) end = size - 1;
             const chunksize = (end - start) + 1;
 
             res.writeHead(206, {
                 'Content-Range': `bytes ${start}-${end}/${size}`,
-                'Accept-Ranges': 'bytes',
                 'Content-Length': chunksize,
                 'Content-Type': mimeType,
             });
 
-            let streamData;
-            try {
-                loadCredentials();
-                const driveRes = await drive.files.get(
-                    { fileId, alt: 'media' },
-                    {
-                        responseType: 'stream',
-                        headers: { Range: `bytes=${start}-${end}` }
-                    }
-                );
-                streamData = driveRes.data;
-            } catch (err) {
-                console.error('RANGE_STREAM_OAUTH_FAILED (fallback to axios):', err.message);
-                const axiosHeaders = { Range: `bytes=${start}-${end}` };
-                const axiosRes = await axios.get(`https://drive.google.com/uc?export=download&id=${fileId}`, {
-                    responseType: 'stream',
-                    headers: axiosHeaders
-                });
-                streamData = axiosRes.data;
-            }
+            const driveRes = await drive.files.get(
+                { fileId, alt: 'media' },
+                { responseType: 'stream', headers: { Range: `bytes=${start}-${end}` } }
+            );
 
-            streamData
+            driveRes.data
                 .on('error', (err) => {
-                    console.error('RANGE_STREAM_ERROR:', err.message);
-                    if (!res.headersSent) res.status(500).end();
+                    if (err.message?.includes('Premature close')) return;
+                    console.error('RANGE_STREAM_ERROR:', fileId, err.message);
+                    if (!res.headersSent) {
+                        res.status(500).end();
+                    } else {
+                        if (!res.writableEnded) res.end();
+                    }
+                })
+                .on('ready', () => {
+                    if (!res.headersSent) res.flushHeaders();
                 })
                 .pipe(res);
 
             req.on('close', () => {
-                if (streamData && typeof streamData.destroy === 'function') {
-                    streamData.destroy();
-                }
+                if (driveRes.data?.destroy) driveRes.data.destroy();
             });
-
             return;
         }
 
-        // ── 4. Full file stream (fallback) ────────────────────────────────────
-        if (size) {
-            res.setHeader('Content-Length', size);
-            res.setHeader('Accept-Ranges', 'bytes');
-        }
+        // 3. Full stream
+        if (size) res.setHeader('Content-Length', size);
 
-        let streamData;
-        try {
-            loadCredentials();
-            const driveRes = await drive.files.get(
-                { fileId, alt: 'media' },
-                { responseType: 'stream' }
-            );
-            streamData = driveRes.data;
-        } catch (err) {
-            console.error('FULL_STREAM_OAUTH_FAILED (fallback to axios):', err.message);
-            const axiosRes = await axios.get(`https://drive.google.com/uc?export=download&id=${fileId}`, { responseType: 'stream' });
-            streamData = axiosRes.data;
-        }
+        const driveRes = await drive.files.get(
+            { fileId, alt: 'media' },
+            { responseType: 'stream' }
+        );
 
-        streamData
+        driveRes.data
             .on('error', (err) => {
-                console.error('STREAM_PROXY_ERROR:', err.message);
-                if (!res.headersSent) res.status(500).end();
+                if (err.message?.includes('Premature close')) return;
+                console.error('FULL_STREAM_ERROR:', fileId, err.message);
+                if (!res.headersSent) {
+                    res.status(500).end();
+                } else {
+                    if (!res.writableEnded) res.end();
+                }
+            })
+            .on('ready', () => {
+                if (!res.headersSent) res.flushHeaders();
             })
             .pipe(res);
 
+        req.on('close', () => {
+            if (driveRes.data?.destroy) driveRes.data.destroy();
+        });
+
     } catch (error) {
-        if (error.message && error.message.includes('Premature close')) {
-            // Client closed connection during metadata fetch, safe to ignore
-            return;
-        }
-        console.error('DRIVE_STREAM_ERROR:', fileId, error.message);
+        if (error.message?.includes('Premature close')) return;
+        console.error('DRIVE_STREAM_FATAL:', fileId, error.message);
         if (!res.headersSent) {
-            const status = error?.response?.status || 500;
-            res.status(status).json({ message: 'Error streaming file from Drive', fileId });
+            res.status(500).json({ message: 'Error streaming from Drive', fileId });
         }
     }
 };
 
-// @desc    Lightweight image proxy for cover art and artist photos (no range support needed)
+// @desc    Lightweight image proxy for cover art and artist photos (cached + deduplicated)
 // @route   GET /api/songs/image/:fileId
 // @access  Public
 export const getImageProxy = async (req, res) => {
-    const fileId = req.params.fileId;
+    const { fileId } = req.params;
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('Expires', new Date(Date.now() + 31536000000).toUTCString());
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.removeHeader('X-Frame-Options');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 24h browser cache
 
     if (req.method === 'OPTIONS') return res.sendStatus(204);
 
     try {
-        // Resolve mime type
-        let mimeType = 'image/jpeg'; // safe default for cover images
-
-        const song = await Song.findOne({ cloudinaryCoverId: fileId })
-            .select('coverMimeType');
-        if (song?.coverMimeType) mimeType = song.coverMimeType;
-        else {
-            const artist = await Artist.findOne({ cloudinaryPhotoId: fileId }).select('_id');
-            if (!artist) {
-                // Last resort: ask Drive
-                try {
-                    loadCredentials();
-                    const meta = await drive.files.get({ fileId, fields: 'mimeType' });
-                    mimeType = meta.data.mimeType || mimeType;
-                } catch { /* keep default */ }
-            }
+        // 1. Serve from in-memory cache (instant, no Drive API call)
+        const cached = getCachedImage(fileId);
+        if (cached) {
+            res.setHeader('Content-Type', cached.mimeType);
+            res.setHeader('Content-Length', cached.data.length);
+            res.setHeader('X-Cache', 'HIT');
+            return res.send(cached.data);
         }
 
-        res.setHeader('Content-Type', mimeType);
-
-        let streamData;
-        try {
-            loadCredentials();
-            const driveRes = await drive.files.get(
-                { fileId, alt: 'media' },
-                { responseType: 'stream' }
-            );
-            streamData = driveRes.data;
-        } catch (err) {
-            console.error('IMAGE_PROXY_OAUTH_FAILED (fallback to axios):', err.message);
-            const axiosRes = await axios.get(`https://drive.google.com/uc?export=view&id=${fileId}`, { responseType: 'stream' });
-            streamData = axiosRes.data;
+        // 2. Deduplicate: if this file is already being fetched, wait for it
+        let fetchPromise;
+        if (_imagePending.has(fileId)) {
+            fetchPromise = _imagePending.get(fileId);
+        } else {
+            fetchPromise = fetchImageBuffer(fileId);
+            _imagePending.set(fileId, fetchPromise);
         }
 
-        streamData
-            .on('error', (err) => {
-                console.error('IMAGE_PROXY_ERROR:', err.message);
-                if (!res.headersSent) res.status(500).end();
-            })
-            .pipe(res);
+        const result = await fetchPromise;
+        _imagePending.delete(fileId);
+
+        // 3. Cache for future requests
+        setCachedImage(fileId, result.data, result.mimeType);
+
+        // 4. Send buffered response (avoids stream-related connection resets)
+        res.setHeader('Content-Type', result.mimeType);
+        res.setHeader('Content-Length', result.data.length);
+        res.setHeader('X-Cache', 'MISS');
+        return res.send(result.data);
 
     } catch (error) {
-        console.error('IMAGE_PROXY_FATAL:', fileId, error.message);
+        _imagePending.delete(fileId);
+
+        // Return a 1x1 transparent PNG to keep the browser console clean
+        const transparentPixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+
         if (!res.headersSent) {
-            res.status(error?.response?.status === 404 ? 404 : 500).end();
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'public, max-age=60');
+            res.status(200).send(transparentPixel);
+        } else {
+            if (!res.writableEnded) res.end();
+        }
+
+        if (error.response?.status !== 404 && error.response?.status !== 403) {
+            console.error(`[Image Proxy] Error for ${fileId}:`, error.message);
         }
     }
 };
@@ -459,7 +480,6 @@ export const deleteSong = async (req, res) => {
             return res.status(404).json({ message: 'Song not found' });
         }
 
-        // Delete from Google Drive if IDs exist
         if (song.cloudinaryAudioId) {
             try {
                 await deleteFromGoogleDrive(song.cloudinaryAudioId);
@@ -509,4 +529,3 @@ export const getLikedSongs = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
-

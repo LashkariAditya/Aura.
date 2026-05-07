@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMobileInView } from '../../hooks/useMobileInView';
+import { Trash2 } from 'lucide-react';
 
 const SongListItemImage = ({ song }) => {
     const [imageError, setImageError] = useState(false);
@@ -22,7 +23,7 @@ const SongListItemImage = ({ song }) => {
     );
 };
 
-const SongListRow = ({ song, queue, index, playSong }) => {
+const SongListRow = ({ song, queue, index, playSong, onRemove }) => {
     return (
         <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -45,12 +46,24 @@ const SongListRow = ({ song, queue, index, playSong }) => {
                     </div>
                 </div>
             </div>
-            <div className="flex items-center space-x-12 uppercase">
+            <div className="flex items-center space-x-6 md:space-x-12 uppercase">
                 <p className="hidden md:block text-[11px] tracking-widest text-gray-300 font-medium">{song.genre || 'OTHER'}</p>
                 <div className="w-px h-6 bg-border hidden md:block" />
                 <p className="text-[11px] tracking-widest text-gray-400 font-mono font-bold">
                     {new Date(song.releaseDate || song.createdAt || Date.now()).getFullYear()}
                 </p>
+                {onRemove && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove(song._id);
+                        }}
+                        className="text-gray-400 hover:text-red-500 transition-colors p-2"
+                        title="Remove from playlist"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                )}
             </div>
         </motion.div>
     );

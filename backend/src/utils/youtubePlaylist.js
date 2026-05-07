@@ -1,105 +1,128 @@
 import axios from 'axios';
 
 /**
- * Recursively find a continuation token in a nested object.
- */
-function findToken(obj) {
-    if (!obj || typeof obj !== 'object') return null;
-    if (obj.token && typeof obj.token === 'string' && obj.token.length > 20) return obj.token;
-    for (const key of Object.keys(obj)) {
-        const result = findToken(obj[key]);
-        if (result) return result;
-    }
-    return null;
-}
-
-/**
- * Fetch ALL videos from a YouTube playlist (handles pagination beyond 100).
- * Returns { title, videos[] } where each video has: videoId, title, author, lengthSeconds, thumbnail
+ * Fetch videos from a YouTube playlist recursively to bypass the 100-item limit.
+ * Bypasses the 100-item limit of standard scrapers using InnerTube continuation tokens.
  */
 export async function fetchFullYouTubePlaylist(listId) {
     const url = `https://www.youtube.com/playlist?list=${listId}`;
-    const res = await axios.get(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-        timeout: 15000
-    });
-    const html = res.data;
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-    const m = html.match(/var ytInitialData = (.+?);<\/script>/);
-    if (!m) throw new Error('Could not parse YouTube playlist page');
+    try {
+        const response = await axios.get(url, { headers: { 'User-Agent': userAgent } });
+        const html = response.data;
 
-    const data = JSON.parse(m[1]);
-    const apiKey = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
-    const playlistTitle = data?.metadata?.playlistMetadataRenderer?.title || 'YouTube Playlist';
+        // Extract InnerTube parameters from page source
+        const apiKeyMatch = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
+        const initialDataMatch = html.match(/var ytInitialData = ({.*?});/s);
 
-    const playlistRenderer = data?.contents?.twoColumnBrowseResultsRenderer
-        ?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer
-        ?.contents?.[0]?.itemSectionRenderer?.contents?.[0]?.playlistVideoListRenderer;
+        if (!apiKeyMatch || !initialDataMatch) {
+            throw new Error('Could not extract YouTube metadata. The playlist may be private or deleted.');
+        }
 
-    if (!playlistRenderer) throw new Error('Playlist not found or is private');
+        const apiKey = apiKeyMatch[1];
+        let data = JSON.parse(initialDataMatch[1]);
+        let allVideos = [];
 
-    let allContents = playlistRenderer.contents || [];
+        // Helper to parse video objects from YouTube's complex JSON
+        const parseVideos = (contents) => {
+            return contents
+                .filter(item => item.playlistVideoRenderer)
+                .map(item => {
+                    const v = item.playlistVideoRenderer;
+                    const thumbs = v.thumbnail?.thumbnails || [];
+                    return {
+                        videoId: v.videoId,
+                        title: v.title?.runs?.[0]?.text || 'Unknown Title',
+                        author: v.shortBylineText?.runs?.[0]?.text || 'Unknown Artist',
+                        lengthSeconds: parseInt(v.lengthSeconds || '0'),
+                        thumbnail: thumbs[thumbs.length - 1]?.url || ''
+                    };
+                });
+        };
 
-    const parseVideos = (items) => items
-        .filter(c => c.playlistVideoRenderer)
-        .map(c => {
-            const v = c.playlistVideoRenderer;
-            return {
-                videoId: v.videoId,
-                title: v.title?.runs?.[0]?.text || 'Untitled',
-                author: v.shortBylineText?.runs?.[0]?.text || 'Unknown',
-                lengthSeconds: parseInt(v.lengthSeconds) || 0,
-                thumbnail: v.thumbnail?.thumbnails?.[v.thumbnail?.thumbnails?.length - 1]?.url || ''
-            };
-        });
+        // Helper to find the next page token
+        const findContinuation = (contents) => {
+            const last = contents[contents.length - 1];
+            if (last && last.continuationItemRenderer) {
+                let token = last.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token;
+                if (!token) {
+                    token = last.continuationItemRenderer.continuationEndpoint?.commandExecutorCommand?.commands?.find(c => c.continuationCommand)?.continuationCommand?.token;
+                }
+                return token;
+            }
+            return null;
+        };
 
-    let videos = parseVideos(allContents);
-
-    // Paginate through continuation tokens
-    let contItem = allContents.find(c => c.continuationItemRenderer);
-
-    while (contItem && apiKey) {
-        const token = findToken(contItem);
-        if (!token) break;
-
+        // Locate first page content
+        let listContents;
         try {
-            const r2 = await axios.post(
-                `https://www.youtube.com/youtubei/v1/browse?key=${apiKey}&prettyPrint=false`,
-                {
-                    context: { client: { clientName: 'WEB', clientVersion: '2.20241001.00.00', hl: 'en', gl: 'US' } },
-                    continuation: token
-                },
-                {
-                    timeout: 15000,
-                    headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-                }
-            );
+            listContents = data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[0].itemSectionRenderer.contents[0].playlistVideoListRenderer.contents;
+        } catch (e) {
+            try {
+                listContents = data.contents.singleColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[0].itemSectionRenderer.contents[0].playlistVideoListRenderer.contents;
+            } catch (e2) {
+                throw new Error('Playlist structure changed or contains no videos.');
+            }
+        }
 
-            let items = [];
-            const actions = r2.data?.onResponseReceivedActions || [];
-            for (const a of actions) {
-                if (a.appendContinuationItemsAction?.continuationItems) {
-                    items = a.appendContinuationItemsAction.continuationItems;
+        allVideos = parseVideos(listContents);
+        let continuationToken = findContinuation(listContents);
+
+        const title = data.metadata?.playlistMetadataRenderer?.title || 'YouTube Playlist';
+        
+        const headerThumbs = data.header?.playlistHeaderRenderer?.playlistHeaderBanner?.heroPlaylistThumbnailRenderer?.thumbnail?.thumbnails || [];
+        const image = headerThumbs.length > 0 
+            ? headerThumbs[headerThumbs.length - 1].url 
+            : (allVideos[0]?.thumbnail || '');
+
+        // Recursive fetching loop
+        let pageCount = 1;
+        while (continuationToken && pageCount < 20) { // Limit to 2000 songs for performance
+            const browseUrl = `https://www.youtube.com/youtubei/v1/browse?key=${apiKey}`;
+            const payload = {
+                continuation: continuationToken,
+                context: {
+                    client: {
+                        clientName: "WEB",
+                        clientVersion: "2.20240210.01.00",
+                        hl: "en",
+                        gl: "US"
+                    }
                 }
+            };
+
+            const res = await axios.post(browseUrl, payload, { 
+                headers: { 
+                    'User-Agent': userAgent,
+                    'Origin': 'https://www.youtube.com',
+                    'Referer': url 
+                } 
+            });
+            
+            const nextData = res.data;
+            let nextContents;
+            try {
+                nextContents = nextData.onResponseReceivedActions[0].appendContinuationItemsAction.continuationItems;
+            } catch (e) {
+                break; 
             }
 
-            videos = videos.concat(parseVideos(items));
-            contItem = items.find(i => i.continuationItemRenderer);
-        } catch (err) {
-            console.error('YT_PAGINATION_ERROR:', err.message);
-            break; // Return what we have so far
+            const newVids = parseVideos(nextContents);
+            if (newVids.length === 0) break;
+            
+            allVideos = allVideos.concat(newVids);
+            continuationToken = findContinuation(nextContents);
+            pageCount++;
         }
+
+        return {
+            title,
+            image,
+            videos: allVideos
+        };
+    } catch (error) {
+        console.error('Full Playlist Fetch Error:', error.message);
+        throw error;
     }
-
-    // Get playlist thumbnail
-    const playlistImage = data?.microformat?.microformatDataRenderer?.thumbnail?.thumbnails?.[0]?.url
-        || videos[0]?.thumbnail || '';
-
-    return {
-        title: playlistTitle,
-        image: playlistImage,
-        videos
-    };
 }

@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
-import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Volume2, Heart, Share2, MoreHorizontal, MonitorPlay } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDown, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Volume2, Heart, Share2, MoreHorizontal, Video } from 'lucide-react';
 import { useMusic } from '../context/MusicContext';
 import { useNavigate } from 'react-router-dom';
 import Visualizer from '../components/music/Visualizer';
@@ -27,12 +27,17 @@ const VinylPlayerPage = () => {
 
         analyser,
         isVideoMode,
-        toggleVideoMode
+        toggleVideoMode,
+        availableQualities,
+        currentQuality,
+        changeQuality,
+        isVideoAvailable
     } = useMusic();
 
     const navigate = useNavigate();
     const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
     const [isQueueOpen, setIsQueueOpen] = useState(false);
+    const [showQualityMenu, setShowQualityMenu] = useState(false);
 
     const [showControls, setShowControls] = useState(true);
     const hideTimer = useRef(null);
@@ -149,6 +154,45 @@ const VinylPlayerPage = () => {
                                 <button onClick={nextSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
                                     <SkipForward className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" strokeWidth={1} />
                                 </button>
+                            </div>
+
+                            <div className="relative group">
+                                <button
+                                    onClick={() => setShowQualityMenu(!showQualityMenu)}
+                                    className={`transition-colors flex items-center space-x-1 ${showQualityMenu ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    <span className="text-[9px] font-bold tracking-widest uppercase">HD</span>
+                                    <ChevronDown className={`w-3 h-3 transition-transform ${showQualityMenu ? 'rotate-180' : ''}`} />
+                                </button>
+                                
+                                <AnimatePresence>
+                                    {showQualityMenu && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            className="absolute bottom-full right-0 mb-4 bg-black/80 backdrop-blur-xl border border-white/10 p-2 rounded-xl min-w-[120px] shadow-2xl z-[90] overflow-hidden"
+                                        >
+                                            <div className="text-[8px] tracking-[0.2em] text-gray-500 font-bold uppercase mb-2 px-2">QUALITY</div>
+                                            {availableQualities.length > 0 ? (
+                                                availableQualities.map((q) => (
+                                                    <button
+                                                        key={q}
+                                                        onClick={() => {
+                                                            changeQuality(q);
+                                                            setShowQualityMenu(false);
+                                                        }}
+                                                        className={`w-full text-left px-3 py-2 text-[10px] tracking-widest uppercase rounded-lg transition-colors ${currentQuality === q ? 'bg-white text-black font-bold' : 'text-white hover:bg-white/10'}`}
+                                                    >
+                                                        {q === 'auto' ? 'AUTO' : q.toUpperCase()}
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="px-3 py-2 text-[10px] text-gray-500">FETCHING...</div>
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
 
                             <button
@@ -353,12 +397,52 @@ const VinylPlayerPage = () => {
                             }}>
                             <div className="absolute top-0 left-0 h-full bg-gray-400" style={{ width: `${volume}%` }} />
                         </div>
-                        <button
-                            onClick={() => toggleVideoMode()}
-                            className="text-gray-300 hover:text-foreground transition-colors"
-                        >
-                            <MonitorPlay size={20} strokeWidth={1.5} />
-                        </button>
+                        <div className="relative group">
+                            <button
+                                onClick={() => setShowQualityMenu(!showQualityMenu)}
+                                className={`transition-colors flex items-center space-x-1 ${showQualityMenu ? 'text-foreground font-bold' : 'text-gray-300 hover:text-foreground'}`}
+                            >
+                                <span className="text-[9px] tracking-widest uppercase">HQ</span>
+                            </button>
+                            <AnimatePresence>
+                                    {showQualityMenu && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            className="absolute bottom-full right-0 mb-4 bg-background/80 backdrop-blur-xl border border-border p-2 rounded-xl min-w-[120px] shadow-2xl z-[90] overflow-hidden"
+                                        >
+                                            <div className="text-[8px] tracking-[0.2em] text-gray-400 font-bold uppercase mb-2 px-2">BITRATE_MODE</div>
+                                            {availableQualities.length > 0 ? (
+                                                availableQualities.map((q) => (
+                                                    <button
+                                                        key={q}
+                                                        onClick={() => {
+                                                            changeQuality(q);
+                                                            setShowQualityMenu(false);
+                                                        }}
+                                                        className={`w-full text-left px-3 py-2 text-[10px] tracking-widest uppercase rounded-lg transition-colors ${currentQuality === q ? 'bg-foreground text-background font-bold' : 'text-foreground hover:bg-muted'}`}
+                                                    >
+                                                        {q === 'auto' ? 'AUTO' : q.toUpperCase()}
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="px-3 py-2 text-[10px] text-gray-400">LOADING...</div>
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                        </div>
+
+                        {isVideoAvailable && (
+                            <button
+                                onClick={() => toggleVideoMode()}
+                                className="text-gray-300 hover:text-foreground transition-colors"
+                                title="Watch Video"
+                            >
+                                <Video size={20} strokeWidth={1.5} />
+                            </button>
+                        )}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

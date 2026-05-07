@@ -1,0 +1,4 @@
+2026-04-19T15:25:47.507Z\nError: Playlist structure changed or contains no videos.
+    at fetchFullYouTubePlaylist (file:///D:/Aura/backend/src/utils/youtubePlaylist.js:65:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async importYoutubePlaylist (file:///D:/Aura/backend/src/controllers/playlistController.js:64:28)\n

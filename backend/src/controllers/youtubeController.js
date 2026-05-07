@@ -19,7 +19,12 @@ export const searchYouTube = async (req, res) => {
 
         const r = await ytSearch(searchQuery);
         // Filter out very long videos (over 15 minutes) and limit to up to 80 results to support pagination
-        const videos = r.videos.filter(v => v.seconds < 900).slice(0, 80);
+        const videos = r.videos.filter(v => 
+            v.seconds >= 55 && // Skip YouTube Shorts (typically < 60s)
+            v.seconds < 1200 && // 20 min limit for standard songs/mixes
+            !v.title.toLowerCase().includes('#shorts') &&
+            !v.url.toLowerCase().includes('/shorts/')
+        ).slice(0, 80);
 
         const formattedResults = videos.map(v => ({
             _id: `yt_${v.videoId}`,
@@ -82,5 +87,42 @@ export const getYouTubePlaylist = async (req, res) => {
     } catch (error) {
         console.error('YOUTUBE_PLAYLIST_ERROR:', error);
         res.status(500).json({ message: 'Error fetching YouTube playlist' });
+    }
+};
+
+// @desc    Match a specific song on YouTube
+// @route   GET /api/youtube/match?q=query
+// @access  Public
+export const matchYouTube = async (req, res) => {
+    const query = req.query.q;
+
+    if (!query) {
+        return res.status(400).json({ message: 'Search query is required' });
+    }
+
+    try {
+        const r = await ytSearch(query);
+        const video = r.videos.find(v => v.seconds < 1200); // Find first video under 20 mins
+
+        if (!video) {
+            return res.status(404).json({ message: 'No match found' });
+        }
+
+        const formattedResult = {
+            _id: `yt_${video.videoId}`,
+            title: video.title,
+            artist: video.author.name,
+            coverUrl: video.image,
+            duration: video.seconds,
+            formattedDuration: `${Math.floor(video.seconds / 60)}:${(video.seconds % 60).toString().padStart(2, '0')}`,
+            audioUrl: '',
+            itemType: 'song',
+            isYoutube: true
+        };
+
+        res.json({ success: true, data: formattedResult });
+    } catch (error) {
+        console.error('YOUTUBE_MATCH_ERROR:', error);
+        res.status(500).json({ message: 'Error matching YouTube video' });
     }
 };

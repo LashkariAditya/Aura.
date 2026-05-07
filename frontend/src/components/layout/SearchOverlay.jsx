@@ -133,7 +133,7 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                         </header>
 
                         {/* Search Input Section */}
-                        <main className="flex-1 flex flex-col px-6 md:px-12 pt-8 md:pt-12 z-10">
+                        <main className="flex-1 flex flex-col px-6 md:px-12 pt-24 md:pt-40 z-10">
                             <div className="max-w-4xl w-full mx-auto flex flex-col items-center">
                                 <div className="mb-12 w-full max-w-2xl text-center">
                                     <span className="text-[10px] uppercase tracking-[0.3em] opacity-50 mb-4 block font-bold">Experimental Discovery v.03</span>
@@ -171,10 +171,10 @@ const SearchOverlay = ({ isOpen, onClose }) => {
                                             onClick={() => item.itemType === 'song' ? handlePlaySong(item) : null}
                                         >
                                             {/* Centered Pop-up Image relative to item */}
-                                            <div className="artist-image opacity-0 absolute -top-32 left-1/2 -translate-x-1/2 w-48 h-64 overflow-hidden pointer-events-none transition-all duration-500 ease-out z-10 shadow-2xl">
+                                            <div className="opacity-0 scale-50 absolute -top-48 left-1/2 -translate-x-1/2 w-56 md:w-72 h-auto max-h-[350px] overflow-hidden pointer-events-none transition-all duration-500 ease-[0.23,1,0.32,1] z-50 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] group-hover:opacity-100 group-hover:scale-100 group-hover:-top-56 flex items-center justify-center bg-black/20 backdrop-blur-sm">
                                                 <img
                                                     alt={item.title || item.name}
-                                                    className="w-full h-full object-cover grayscale brightness-90"
+                                                    className="w-full h-full object-contain grayscale brightness-90 group-hover:grayscale-0 transition-all duration-700"
                                                     src={item.itemType === 'song' ? item.coverUrl : (item.photoUrl || item.avatar || 'https://placehold.co/400x500')}
                                                 />
                                             </div>

@@ -6,11 +6,25 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   server: {
     port: 3000,
+    host: true,
+    strictPort: true,
+    hmr: {
+        protocol: 'ws',
+        host: 'localhost',
+        port: 3000,
+    }
   },
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: {
+        enabled: false, // Don't register SW in development
+      },
+      workbox: {
+        navigateFallback: null, // Prevent navigation preload cancellation warnings
+        cleanupOutdatedCaches: true,
+      },
       includeAssets: ['logo.svg'],
       manifest: {
         name: 'Aura Music',

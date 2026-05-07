@@ -15,6 +15,14 @@ const kindeDomain = import.meta.env.VITE_KINDE_DOMAIN || 'https://fallback.kinde
 const kindeRedirectUri = import.meta.env.VITE_KINDE_REDIRECT_URL || window.location.origin;
 const kindeLogoutUri = import.meta.env.VITE_KINDE_LOGOUT_URL || window.location.origin;
 
+// Unregister stale service workers in development to prevent console noise
+// (e.g., "navigation preload request was cancelled" from a previous production build)
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+        for (const r of regs) r.unregister();
+    });
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

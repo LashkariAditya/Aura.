@@ -64,7 +64,9 @@ const PlaylistHoverRow = ({ playlist, index }) => {
 
                 {/* Floating Info on Hover */}
                 <div className="absolute bottom-12 left-12 z-20">
-                    <p className="text-[10px] tracking-[0.5em] text-white/60 mb-2 font-bold uppercase drop-shadow-md">SONIC CURATION</p>
+                    <p className="text-[10px] tracking-[0.5em] text-white/60 mb-2 font-bold uppercase drop-shadow-md">
+                        {playlist.isPublic ? 'SONIC CURATION' : 'PRIVATE CURATION'}
+                    </p>
                     <h3 className="serif-display text-4xl text-white italic drop-shadow-md">{playlist.name}</h3>
                 </div>
             </div>

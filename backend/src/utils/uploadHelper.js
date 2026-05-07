@@ -55,7 +55,7 @@ export const uploadToGoogleDrive = async (file, folderId = null) => {
             mimeType: response.data.mimeType || file.mimetype,
             // Audio goes through proxy for CORS/Visualizer support
             // Images use a high-performance direct link
-            url: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/songs/stream/${fileId}`,
+            url: `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/songs/stream/${fileId}`,
             webViewLink: response.data.webViewLink
         };
     } catch (error) {

@@ -6,7 +6,7 @@ import songService from '../services/songService';
 
 const SyncContext = createContext();
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
 
 export const SyncProvider = ({ children }) => {
     const { user } = useAuth();

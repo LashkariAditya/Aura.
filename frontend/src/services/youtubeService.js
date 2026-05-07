@@ -8,6 +8,10 @@ const youtubeService = {
     getPlaylist: async (listId) => {
         const response = await api.get(`/youtube/playlist?listId=${encodeURIComponent(listId)}`);
         return response.data;
+    },
+    searchMatch: async (query) => {
+        const response = await api.get(`/youtube/match?q=${encodeURIComponent(query)}`);
+        return response.data;
     }
 };
 

@@ -185,10 +185,6 @@ html {
 }
 
 /* Stitch Search Specific */
-.artist-item:hover .artist-image {
-  opacity: 1;
-  transform: scale(1.05) translateY(-10px);
-}
 
 .custom-cursor-trail {
   pointer-events: none;

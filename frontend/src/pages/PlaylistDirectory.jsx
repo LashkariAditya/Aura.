@@ -11,8 +11,10 @@ import toast from 'react-hot-toast';
 const PlaylistDirectory = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [playlists, setPlaylists] = useState([]);
+    const [allPlaylists, setAllPlaylists] = useState([]); // Master list
+    const [playlists, setPlaylists] = useState([]);      // Filtered list for display
     const [loading, setLoading] = useState(true);
+    const [isSearching, setIsSearching] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLetter, setSelectedLetter] = useState('ALL');
@@ -20,28 +22,67 @@ const PlaylistDirectory = () => {
 
     const alphabet = ['ALL', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
 
+    // Initial fetch to populate master list
     useEffect(() => {
-        const fetchPlaylists = async () => {
+        const fetchInitial = async () => {
             setLoading(true);
             try {
-                const res = await playlistService.getPublicPlaylists({
-                    search: searchTerm
-                });
-                let filtered = res.data.playlists;
-                if (selectedLetter !== 'ALL') {
-                    filtered = filtered.filter(p => p.name.toUpperCase().startsWith(selectedLetter));
-                }
-                setPlaylists(filtered);
+                const res = await playlistService.getPublicPlaylists();
+                setAllPlaylists(res.data.playlists || []);
+                setPlaylists(res.data.playlists || []);
             } catch (error) {
-                console.error('Error fetching playlists:', error);
+                console.error('Error fetching initial playlists:', error);
             } finally {
                 setLoading(false);
             }
         };
+        fetchInitial();
+    }, []);
 
-        const timer = setTimeout(fetchPlaylists, 500);
+    // Instant local filtering + Debounced backend search
+    useEffect(() => {
+        // 1. Instant local filter for snappiness
+        let filtered = [...allPlaylists];
+
+        if (searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase();
+            filtered = filtered.filter(p => 
+                p.name.toLowerCase().includes(term) || 
+                p.description?.toLowerCase().includes(term) ||
+                p.userId?.name?.toLowerCase().includes(term)
+            );
+        }
+
+        if (selectedLetter !== 'ALL') {
+            filtered = filtered.filter(p => p.name.toUpperCase().startsWith(selectedLetter));
+        }
+
+        setPlaylists(filtered);
+
+        // 2. Debounced backend search for deeper/fresher results
+        if (searchTerm.trim() === '') return;
+        
+        const fetchDeep = async () => {
+            setIsSearching(true);
+            try {
+                const res = await playlistService.getPublicPlaylists({ search: searchTerm });
+                // Merge new results into master list if they don't exist
+                const newResults = res.data.playlists || [];
+                setAllPlaylists(prev => {
+                    const existingIds = new Set(prev.map(p => p._id));
+                    const uniqueNew = newResults.filter(p => !existingIds.has(p._id));
+                    return [...prev, ...uniqueNew];
+                });
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsSearching(false);
+            }
+        };
+
+        const timer = setTimeout(fetchDeep, 800);
         return () => clearTimeout(timer);
-    }, [searchTerm, selectedLetter]);
+    }, [searchTerm, selectedLetter, allPlaylists]);
     const handleSearchChange = async (e) => {
         const val = e.target.value;
         setSearchTerm(val);
@@ -58,6 +99,13 @@ const PlaylistDirectory = () => {
             }
 
             const listId = match[1];
+
+            if (listId.startsWith('RD')) {
+                toast.error("YOUTUBE MIXES CANNOT BE IMPORTED. PLEASE USE A STANDARD PLAYLIST.");
+                setSearchTerm('');
+                return;
+            }
+
             setSearchTerm(''); // clear input
             setIsImporting(true);
             const loadingToast = toast.loading('IMPORTING YOUTUBE PLAYLIST...');
@@ -70,7 +118,8 @@ const PlaylistDirectory = () => {
                 }
             } catch (error) {
                 console.error(error);
-                toast.error('FAILED TO IMPORT YOUTUBE PLAYLIST', { id: loadingToast });
+                const errMsg = error.response?.data?.error?.toUpperCase() || 'FAILED TO IMPORT YOUTUBE PLAYLIST';
+                toast.error(`IMPORT FAILED: ${errMsg}`, { id: loadingToast });
             } finally {
                 setIsImporting(false);
             }
@@ -128,17 +177,33 @@ const PlaylistDirectory = () => {
                         <div className="relative group min-w-[200px]">
                             <input
                                 type="text"
-                                placeholder="SEARCH..."
+                                placeholder={isSearching ? "FINDING..." : "SEARCH..."}
                                 value={searchTerm}
                                 onChange={handleSearchChange}
                                 disabled={isImporting}
-                                className="w-full bg-transparent border-b border-border py-3 pl-8 text-[11px] tracking-widest uppercase focus:outline-none focus:border-foreground transition-all focus:min-w-[300px] text-foreground disabled:opacity-50"
+                                className="w-full bg-transparent border-b border-border py-4 pl-10 pr-10 text-[11px] tracking-widest uppercase focus:outline-none focus:border-foreground transition-all focus:min-w-[350px] text-foreground disabled:opacity-50"
                             />
                             <Search
                                 size={14}
-                                className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-300 group-hover:text-foreground transition-colors cursor-pointer"
-                                onClick={() => document.querySelector('input[placeholder="SEARCH..."]')?.focus()}
+                                className={`absolute left-0 top-1/2 -translate-y-1/2 transition-colors cursor-pointer ${isSearching ? 'text-foreground animate-pulse' : 'text-gray-300 group-hover:text-foreground'}`}
+                                onClick={() => document.querySelector('input[placeholder*="SEARCH"]')?.focus()}
                             />
+                            {searchTerm && !isImporting && (
+                                <button 
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 hover:text-foreground transition-colors p-2"
+                                >
+                                    <span className="text-[10px] font-bold">ESC</span>
+                                </button>
+                            )}
+                            {searchTerm && (
+                                <div className="absolute -bottom-6 left-0 flex items-center space-x-2">
+                                    <div className="w-1 h-1 rounded-full bg-foreground animate-ping" />
+                                    <span className="text-[8px] font-bold tracking-[0.2em] text-gray-400 uppercase">
+                                        {playlists.length} RECEPTORS FOUND
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Dropdowns */}

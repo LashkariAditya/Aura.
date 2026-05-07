@@ -25,20 +25,21 @@ const getBackendUrl = () => process.env.BACKEND_URL || 'https://aura-production-
  *   - http://localhost:5000/api/songs/stream/FILE_ID   (already a proxy URL)
  *   - http://localhost:5000/api/songs/image/FILE_ID    (already a proxy URL)
  */
-function extractDriveId(url) {
+export function extractDriveId(url) {
     if (!url) return null;
-
-    // Already our proxy URL — extract the file ID at the end
-    const proxyMatch = url.match(/\/api\/songs\/(?:stream|image)\/([^/?#]+)/);
+    
+    // Pattern 1: Common URL segments
+    const segmentMatch = url.match(/(?:id=|\/d\/|\/file\/d\/|\/uc\?id=)([a-zA-Z0-9_-]{25,})/);
+    if (segmentMatch) return segmentMatch[1];
+    
+    // Pattern 2: Our own proxy format (catch-all for different hosts/ports)
+    const proxyMatch = url.match(/\/api\/songs\/(?:stream|image)\/([^/?#\s]+)/);
     if (proxyMatch) return proxyMatch[1];
 
-    // lh3.googleusercontent.com/d/FILE_ID
-    const lh3Match = url.match(/lh3\.googleusercontent\.com\/d\/([^/?#]+)/);
-    if (lh3Match) return lh3Match[1];
-
-    // drive.google.com/file/d/FILE_ID/...
-    const driveMatch = url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
-    if (driveMatch) return driveMatch[1];
+    // Pattern 3: Raw ID (if it looks like a Drive ID - usually 33 chars of alphanumeric/underscore/dash)
+    if (/^[a-zA-Z0-9_-]{25,45}$/.test(url)) {
+        return url;
+    }
 
     return null;
 }

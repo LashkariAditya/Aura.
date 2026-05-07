@@ -109,6 +109,18 @@ const PlaylistPage = () => {
             nameLength > 8 ? 'text-5xl md:text-8xl lg:text-[10rem]' :
                 'text-6xl md:text-9xl lg:text-[14rem]';
 
+    const handleRemoveSong = async (songId) => {
+        if (window.confirm('Remove this track from playlist?')) {
+            try {
+                await playlistService.removeSong(id, songId);
+                toast.success('TRACK REMOVED');
+                await fetchPlaylist(); // Refresh
+            } catch (error) {
+                toast.error('FAILED TO REMOVE TRACK');
+            }
+        }
+    };
+
     return (
         <div className="min-h-screen pt-32 pb-32 bg-background text-foreground">
             {/* Minimalist Header */}
@@ -237,6 +249,7 @@ const PlaylistPage = () => {
                                     queue={playlist.songs}
                                     index={idx}
                                     playSong={playSong}
+                                    onRemove={currentUser?._id === playlist.userId?._id ? handleRemoveSong : null}
                                 />
                             ))}
                         </div>

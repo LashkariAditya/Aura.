@@ -12,9 +12,9 @@ export const createPlaylist = async (req, res) => {
     const { name, description, isPublic } = req.body;
 
     try {
-        const existingPlaylist = await Playlist.findOne({ name });
+        const existingPlaylist = await Playlist.findOne({ name, userId: req.user._id });
         if (existingPlaylist) {
-            return res.status(200).json({ success: false, message: 'A playlist with this name already exists' });
+            return res.status(200).json({ success: false, message: 'You already have a playlist with this name' });
         }
 
         let coverUrl = null;
@@ -98,10 +98,19 @@ export const importYoutubePlaylist = async (req, res) => {
 
         const shareCode = Math.random().toString(36).substring(2, 10).toUpperCase();
 
+        let baseName = (ytPlaylist.title || 'YouTube Import').substring(0, 40);
+        let finalName = baseName;
+        let counter = 1;
+        while (await Playlist.findOne({ name: finalName, userId: req.user._id })) {
+            const suffix = ` (${counter})`;
+            finalName = `${baseName.substring(0, 40 - suffix.length)}${suffix}`;
+            counter++;
+        }
+
         const playlist = await Playlist.create({
-            name: ytPlaylist.title || 'YouTube Import',
+            name: finalName,
             description: `Imported from YouTube · ${ytPlaylist.videos.length} tracks`,
-            isPublic: true,
+            isPublic: false,
             userId: req.user._id,
             coverUrl: ytPlaylist.image || ytPlaylist.videos[0]?.thumbnail,
             shareCode,
@@ -116,7 +125,10 @@ export const importYoutubePlaylist = async (req, res) => {
 
     } catch (error) {
         console.error('YT_IMPORT_ERR:', error);
-        res.status(500).json({ message: 'Error importing YouTube Playlist' });
+        import('fs').then(fs => {
+            fs.writeFileSync('yt_import_error_log.txt', new Date().toISOString() + '\\n' + (error.stack || error.message) + '\\n');
+        });
+        res.status(500).json({ message: 'Error importing YouTube Playlist', error: error.message });
     }
 };
 
@@ -208,19 +220,38 @@ export const getUserPlaylists = async (req, res) => {
     res.json({ success: true, data: { playlists: formattedPlaylists } });
 };
 
-// @desc    Get all public playlists
+// @desc    Get all public playlists (and own private ones if logged in)
 // @route   GET /api/playlists
 // @access  Public
 export const getPublicPlaylists = async (req, res) => {
     try {
         const { genre, search } = req.query;
-        let query = { isPublic: true };
+        
+        // Try to identify user for private playlist inclusion
+        let currentUserId = null;
+        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+            try {
+                const token = req.headers.authorization.split(' ')[1];
+                const decoded = jwt.decode(token);
+                if (decoded && decoded.sub) {
+                    const user = await User.findOne({ kindeId: decoded.sub });
+                    if (user) {
+                        currentUserId = user._id;
+                    }
+                }
+            } catch (err) {
+                console.error('Quiet token error in getPublicPlaylists:', err);
+            }
+        }
 
-        if (genre) {
-            // This assumes songs in playlist might match genre, 
-            // or we might need a genre field on Playlist itself.
-            // For now, let's keep it simple.
-            // If the model has genre, we use it.
+        let query = {
+            $or: [
+                { isPublic: true }
+            ]
+        };
+
+        if (currentUserId) {
+            query.$or.push({ userId: currentUserId });
         }
 
         if (search) {
@@ -244,6 +275,8 @@ export const getPublicPlaylists = async (req, res) => {
     }
 };
 
+import User from '../models/User.js';
+
 // @desc    Get single playlist
 // @route   GET /api/playlists/:id
 // @access  Public
@@ -253,10 +286,15 @@ export const getPlaylistById = async (req, res) => {
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
             const token = req.headers.authorization.split(' ')[1];
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            req.user = { _id: decoded.id };
+            const decoded = jwt.decode(token);
+            if (decoded && decoded.sub) {
+                const user = await User.findOne({ kindeId: decoded.sub });
+                if (user) {
+                    req.user = user;
+                }
+            }
         } catch (error) {
-            // Invalid token, ignore
+            console.error('Error decoding token in getPlaylistById:', error);
         }
     }
 

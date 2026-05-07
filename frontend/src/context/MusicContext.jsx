@@ -18,6 +18,8 @@ export const MusicProvider = ({ children }) => {
     const [repeatMode, setRepeatMode] = useState('off');
     const [likedSongsIds, setLikedSongsIds] = useState([]);
     const [isVideoMode, setIsVideoMode] = useState(false);
+    const [availableQualities, setAvailableQualities] = useState([]);
+    const [currentQuality, setCurrentQuality] = useState('auto');
 
     // Refs for state accessed inside callbacks
     const queueRef = useRef([]);
@@ -25,7 +27,9 @@ export const MusicProvider = ({ children }) => {
     const isShuffleRef = useRef(false);
     const repeatModeRef = useRef('off');
     const ytPlayerRef = useRef(null);
+    const driveVideoRef = useRef(null);
     const isYtRef = useRef(false);
+    const isDriveVideoRef = useRef(false);
 
     // Playback control lock for restricted sync room users
     const canChangeRef = useRef(true);
@@ -84,7 +88,10 @@ export const MusicProvider = ({ children }) => {
         if (!force && !canChangeRef.current) return;
 
         const isYoutube = song._id?.toString().startsWith('yt_') || song.audioUrl?.toString().startsWith('yt_') || song.isYoutube;
+        const isDriveVideo = song.audioMimeType?.startsWith('video/');
+        
         isYtRef.current = isYoutube;
+        isDriveVideoRef.current = isDriveVideo;
 
         // Clean up previous howler sound
         if (soundRef.current && !isYoutube) {
@@ -100,9 +107,14 @@ export const MusicProvider = ({ children }) => {
             soundRef.current = null;
         }
 
-        // Clean up or prepare Youtube player
+        // Clean up or prepare Youtube / Drive Video player
         if (!isYoutube && ytPlayerRef.current) {
             ytPlayerRef.current.stopVideo();
+        }
+        if (!isDriveVideo && driveVideoRef.current) {
+            driveVideoRef.current.pause();
+            driveVideoRef.current.removeAttribute('src');
+            driveVideoRef.current.load(); // fully reset the element
         }
 
         if (songQueue.length > 0) {
@@ -115,6 +127,11 @@ export const MusicProvider = ({ children }) => {
         }
 
         setCurrentSong(song);
+        
+        // Reset video mode if switching to a non-video/non-drive-video song
+        if (!isYoutube && !isDriveVideo) {
+            setIsVideoMode(false);
+        }
         setIsLoading(true);
         setIsPlaying(true); // Optimistic UI update
 
@@ -129,6 +146,16 @@ export const MusicProvider = ({ children }) => {
                 ytPlayerRef.current.loadVideoById(ytId);
                 ytPlayerRef.current.playVideo();
                 ytPlayerRef.current.setVolume(volume);
+                startTimer();
+            }
+        } else if (isDriveVideo) {
+            if (Howler.ctx && Howler.ctx.state === 'running') {
+                Howler.ctx.suspend();
+            }
+            if (driveVideoRef.current) {
+                driveVideoRef.current.src = song.audioUrl;
+                driveVideoRef.current.volume = volume / 100;
+                driveVideoRef.current.play().catch(e => console.error('DRIVE_VIDEO_PLAY_FAILED:', e));
                 startTimer();
             }
         } else {
@@ -198,6 +225,15 @@ export const MusicProvider = ({ children }) => {
             return;
         }
 
+        if (isDriveVideoRef.current && driveVideoRef.current) {
+            if (driveVideoRef.current.paused) {
+                driveVideoRef.current.play();
+            } else {
+                driveVideoRef.current.pause();
+            }
+            return;
+        }
+
         if (!soundRef.current) return;
         if (isPlaying) {
             soundRef.current.pause();
@@ -215,6 +251,12 @@ export const MusicProvider = ({ children }) => {
         if (isYtRef.current && ytPlayerRef.current) {
             if (shouldPlay) ytPlayerRef.current.playVideo();
             else ytPlayerRef.current.pauseVideo();
+            return;
+        }
+
+        if (isDriveVideoRef.current && driveVideoRef.current) {
+            if (shouldPlay) driveVideoRef.current.play();
+            else driveVideoRef.current.pause();
             return;
         }
 
@@ -243,6 +285,14 @@ export const MusicProvider = ({ children }) => {
                         setProgress((time / duration) * 100);
                     }
                 }
+            } else if (isDriveVideoRef.current && driveVideoRef.current) {
+                if (!driveVideoRef.current.paused) {
+                    const time = driveVideoRef.current.currentTime;
+                    const duration = driveVideoRef.current.duration;
+                    if (duration > 0) {
+                        setProgress((time / duration) * 100);
+                    }
+                }
             } else if (soundRef.current && soundRef.current.playing()) {
                 const current = soundRef.current.seek();
                 const duration = soundRef.current.duration();
@@ -266,6 +316,16 @@ export const MusicProvider = ({ children }) => {
             return;
         }
 
+        if (isDriveVideoRef.current && driveVideoRef.current) {
+            const duration = driveVideoRef.current.duration;
+            if (duration > 0) {
+                const targetTime = isPercent ? (value / 100) * duration : value;
+                driveVideoRef.current.currentTime = targetTime;
+                setProgress(isPercent ? value : (targetTime / duration) * 100);
+            }
+            return;
+        }
+
         if (soundRef.current) {
             const duration = soundRef.current.duration();
             const targetTime = isPercent ? (value / 100) * duration : value;
@@ -282,6 +342,8 @@ export const MusicProvider = ({ children }) => {
         setVolume(value);
         if (isYtRef.current && ytPlayerRef.current) {
             ytPlayerRef.current.setVolume(value);
+        } else if (isDriveVideoRef.current && driveVideoRef.current) {
+            driveVideoRef.current.volume = value / 100;
         } else if (soundRef.current) {
             soundRef.current.volume(value / 100);
         }
@@ -327,6 +389,9 @@ export const MusicProvider = ({ children }) => {
             if (isYtRef.current && ytPlayerRef.current) {
                 ytPlayerRef.current.seekTo(0);
                 ytPlayerRef.current.playVideo();
+            } else if (isDriveVideoRef.current && driveVideoRef.current) {
+                driveVideoRef.current.currentTime = 0;
+                driveVideoRef.current.play();
             } else if (soundRef.current) {
                 soundRef.current.play();
             }
@@ -354,6 +419,9 @@ export const MusicProvider = ({ children }) => {
         if (isYtRef.current && ytPlayerRef.current) {
             return ytPlayerRef.current.getCurrentTime() || 0;
         }
+        if (isDriveVideoRef.current && driveVideoRef.current) {
+            return driveVideoRef.current.currentTime || 0;
+        }
         return soundRef.current?.seek() || 0;
     };
 
@@ -361,8 +429,20 @@ export const MusicProvider = ({ children }) => {
         if (isYtRef.current && ytPlayerRef.current) {
             return ytPlayerRef.current.getDuration() || 0;
         }
+        if (isDriveVideoRef.current && driveVideoRef.current) {
+            return driveVideoRef.current.duration || 0;
+        }
         return soundRef.current?.duration() || 0;
     };
+
+    const isVideoAvailable = !!(currentSong && (
+        currentSong.isYoutube || 
+        currentSong._id?.toString().includes('yt_') || 
+        currentSong.videoId ||
+        currentSong.audioMimeType?.startsWith('video/') ||
+        (!currentSong.audioUrl || currentSong.audioUrl === '') ||
+        (currentSong.title && currentSong.artist) // Enable fallback video search or visualizer mode
+    ));
 
     return (
         <MusicContext.Provider
@@ -392,7 +472,23 @@ export const MusicProvider = ({ children }) => {
                 analyser: analyserRef.current,
                 setPlaybackLock,
                 isVideoMode,
-                toggleVideoMode: () => setIsVideoMode(!isVideoMode)
+                toggleVideoMode: () => {
+                    if (isVideoAvailable) {
+                        setIsVideoMode(!isVideoMode);
+                    } else {
+                        console.warn('Video mode is not available for this selection.');
+                        setIsVideoMode(false);
+                    }
+                },
+                isVideoAvailable,
+                availableQualities,
+                currentQuality,
+                changeQuality: (q) => {
+                    if (ytPlayerRef.current) {
+                        ytPlayerRef.current.setPlaybackQuality(q);
+                        setCurrentQuality(q);
+                    }
+                }
             }}
         >
             {children}
@@ -400,55 +496,84 @@ export const MusicProvider = ({ children }) => {
                 Important note: To bypass backend timeouts, the best method always integrates playback directly into the frontend context block! */}
             <div
                 className={
-                    isVideoMode && isYtRef.current
+                    isVideoMode && (isYtRef.current || isDriveVideoRef.current)
                         ? "fixed top-0 left-0 w-full h-screen z-[65] bg-black transition-all duration-500 overflow-hidden flex items-center justify-center pointer-events-none"
                         : "fixed overflow-hidden opacity-0 pointer-events-none w-0 h-0"
                 }
                 style={!isVideoMode ? { zIndex: -9999 } : {}}
             >
-                <YouTube
-                    videoId="" // will be loaded via ref
-                    opts={{
-                        height: '100%',
-                        width: '100%',
-                        host: 'https://www.youtube-nocookie.com',
-                        playerVars: {
-                            autoplay: 0,
-                            controls: 0,
-                            disablekb: 1,
-                            fs: 0,
-                            rel: 0,
-                            modestbranding: 1,
-                            enablejsapi: 1,
-                            origin: window.location.origin,
-                            widget_referrer: window.location.origin
-                        },
-                    }}
-                    onReady={(event) => {
-                        ytPlayerRef.current = event.target;
-                        ytPlayerRef.current.setVolume(volume);
-                    }}
-                    onStateChange={(event) => {
-                        const YTState = { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3 };
-                        if (event.data === YTState.PLAYING) {
-                            setIsPlaying(true);
+                {isYtRef.current && currentSong && (
+                    <YouTube
+                        videoId={
+                            currentSong.videoId || 
+                            (currentSong.audioUrl?.length === 11 ? currentSong.audioUrl : null) || 
+                            (currentSong._id?.startsWith('yt_') ? currentSong._id.replace('yt_', '') : null) ||
+                            ''
+                        }
+                        opts={{
+                            height: '100%',
+                            width: '100%',
+                            playerVars: {
+                                autoplay: 1,
+                                controls: 0,
+                                disablekb: 1,
+                                fs: 0,
+                                rel: 0,
+                                modestbranding: 1,
+                                enablejsapi: 1,
+                                origin: window.location.origin
+                            },
+                        }}
+                        onReady={(event) => {
+                            ytPlayerRef.current = event.target;
+                            ytPlayerRef.current.setVolume(volume);
+                        }}
+                        onStateChange={(event) => {
+                            const YTState = { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3 };
+                            if (event.data === YTState.PLAYING) {
+                                setIsPlaying(true);
+                                setIsLoading(false);
+                                startTimer();
+                                
+                                // Capture available qualities once playing
+                                if (ytPlayerRef.current?.getAvailableQualityLevels) {
+                                    setAvailableQualities(ytPlayerRef.current.getAvailableQualityLevels());
+                                    setCurrentQuality(ytPlayerRef.current.getPlaybackQuality());
+                                }
+                            } else if (event.data === YTState.PAUSED) {
+                                setIsPlaying(false);
+                                stopTimer();
+                            } else if (event.data === YTState.ENDED) {
+                                handleSongEnd();
+                            } else if (event.data === YTState.BUFFERING) {
+                                setIsLoading(true);
+                            }
+                        }}
+                        onError={(e) => {
+                            console.error('YOUTUBE_PLAYER_ERROR', e);
                             setIsLoading(false);
-                            startTimer();
-                        } else if (event.data === YTState.PAUSED) {
-                            setIsPlaying(false);
-                            stopTimer();
-                        } else if (event.data === YTState.ENDED) {
-                            handleSongEnd();
-                        } else if (event.data === YTState.BUFFERING) {
-                            setIsLoading(true);
+                            nextSong(true);
+                        }}
+                        className="w-full h-full pointer-events-none select-none flex items-center justify-center"
+                    />
+                )}
+
+                {/* Drive Video Player — always in DOM so driveVideoRef is available when playSong runs.
+                    Source is set programmatically in playSong(), not via prop, to avoid loading when idle. */}
+                <video
+                    ref={driveVideoRef}
+                    className="w-full h-full object-contain"
+                    playsInline
+                    onPlay={() => { if (isDriveVideoRef.current) setIsPlaying(true); }}
+                    onPause={() => { if (isDriveVideoRef.current) setIsPlaying(false); }}
+                    onEnded={() => { if (isDriveVideoRef.current) handleSongEnd(); }}
+                    onLoadedData={() => { if (isDriveVideoRef.current) setIsLoading(false); }}
+                    onWaiting={() => { if (isDriveVideoRef.current) setIsLoading(true); }}
+                    onError={() => {
+                        if (isDriveVideoRef.current && driveVideoRef.current?.src) {
+                            setIsLoading(false);
                         }
                     }}
-                    onError={(e) => {
-                        console.error('YOUTUBE_PLAYER_ERROR', e);
-                        setIsLoading(false);
-                        nextSong(true);
-                    }}
-                    className="w-full h-full pointer-events-none select-none flex items-center justify-center"
                 />
 
                 {/* Physical overlay to brutally cover any remaining watermark at the bottom right */}
@@ -458,4 +583,16 @@ export const MusicProvider = ({ children }) => {
     );
 };
 
-export const useMusic = () => useContext(MusicContext);
+/**
+ * Hook to access the music context
+ */
+export const useMusic = () => {
+    const context = useContext(MusicContext);
+    if (!context) {
+        throw new Error('useMusic must be used within a MusicProvider');
+    }
+    return context;
+};
+
+// Also export the context for specific use cases
+export { MusicContext };
