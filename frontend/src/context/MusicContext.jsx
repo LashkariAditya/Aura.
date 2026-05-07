@@ -3,6 +3,7 @@ import { Howl, Howler } from 'howler';
 import YouTube from 'react-youtube';
 import { useAuth } from './AuthContext';
 import songService from '../services/songService';
+import historyService from '../services/historyService';
 
 const MusicContext = createContext();
 
@@ -93,6 +94,11 @@ export const MusicProvider = ({ children }) => {
 
     const playSong = useCallback((song, songQueue = [], force = false) => {
         if (!force && !canChangeRef.current) return;
+        if (!song) return;
+
+        if (user && song._id) {
+            historyService.recordPlay({ songId: song._id, listenDuration: 0, completionPercentage: 0 }).catch(() => {});
+        }
 
         const isYoutube = song._id?.toString().startsWith('yt_') || song.audioUrl?.toString().startsWith('yt_') || song.isYoutube;
         const isDriveVideoSong = song.audioMimeType?.startsWith('video/');

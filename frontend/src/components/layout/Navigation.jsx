@@ -22,6 +22,7 @@ const Navigation = () => {
         { label: 'Artists', path: '/artists' },
         { label: 'Playlists', path: '/playlists' },
         { label: 'Liked', path: '/liked' },
+        { label: 'History', path: '/history' },
     ];
 
 

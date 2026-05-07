@@ -11,7 +11,7 @@ const AddToPlaylistModal = ({ isOpen, onClose, songId }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [newPlaylistName, setNewPlaylistName] = useState('');
-    const [isPublic, setIsPublic] = useState(true);
+    const [isPublic, setIsPublic] = useState(false);
     const [coverFile, setCoverFile] = useState(null);
     const [coverPreview, setCoverPreview] = useState(null);
 
@@ -139,20 +139,6 @@ const AddToPlaylistModal = ({ isOpen, onClose, songId }) => {
                                         className="w-full bg-transparent border-b border-border py-4 text-xl font-serif focus:outline-none focus:border-foreground transition-colors mb-6"
                                         placeholder="Enter name..."
                                     />
-
-                                    <label className="text-[10px] tracking-widest uppercase text-gray-400 block mb-2 cursor-pointer flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={isPublic}
-                                            onChange={(e) => setIsPublic(e.target.checked)}
-                                            className="mr-2"
-                                        />
-                                        PUBLIC PLAYLIST
-                                    </label>
-                                    {!isPublic && (
-                                        <p className="text-[9px] text-gray-500 mb-6 uppercase">Private playlists require a share code to view.</p>
-                                    )}
-                                    {isPublic && <div className="mb-6"></div>}
 
                                     <label className="text-[10px] tracking-widest uppercase text-gray-400 block mb-2">COVER ART (OPTIONAL)</label>
                                     <div className="relative">
