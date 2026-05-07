@@ -127,15 +127,19 @@ const VinylPlayerPage = () => {
                         </div>
 
                         {/* Controls Row aligned to Screenshot 2 */}
-                        <div className="flex items-center justify-between pb-2">
-                            <button
-                                onClick={toggleShuffle}
-                                className={`transition-colors ${isShuffle ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                            >
-                                <Shuffle size={14} strokeWidth={1.5} />
-                            </button>
+                        <div className="flex items-center justify-between pb-2 relative">
+                            {/* Left Controls */}
+                            <div className="flex-1 flex justify-start">
+                                <button
+                                    onClick={toggleShuffle}
+                                    className={`transition-colors ${isShuffle ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    <Shuffle size={14} strokeWidth={1.5} />
+                                </button>
+                            </div>
 
-                            <div className="flex items-center space-x-8 md:space-x-12">
+                            {/* Center Playback Controls */}
+                            <div className="flex items-center justify-center space-x-8 md:space-x-12 shrink-0">
                                 <button onClick={previousSong} className="hover:scale-110 transition-transform flex items-center justify-center text-white">
                                     <SkipBack className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" strokeWidth={1} />
                                 </button>
@@ -156,52 +160,55 @@ const VinylPlayerPage = () => {
                                 </button>
                             </div>
 
-                            <div className="relative group">
-                                <button
-                                    onClick={() => setShowQualityMenu(!showQualityMenu)}
-                                    className={`transition-colors flex items-center space-x-1 ${showQualityMenu ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                                >
-                                    <span className="text-[9px] font-bold tracking-widest uppercase">HD</span>
-                                    <ChevronDown className={`w-3 h-3 transition-transform ${showQualityMenu ? 'rotate-180' : ''}`} />
-                                </button>
-                                
-                                <AnimatePresence>
-                                    {showQualityMenu && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            className="absolute bottom-full right-0 mb-4 bg-black/80 backdrop-blur-xl border border-white/10 p-2 rounded-xl min-w-[120px] shadow-2xl z-[90] overflow-hidden"
-                                        >
-                                            <div className="text-[8px] tracking-[0.2em] text-gray-500 font-bold uppercase mb-2 px-2">QUALITY</div>
-                                            {availableQualities.length > 0 ? (
-                                                availableQualities.map((q) => (
-                                                    <button
-                                                        key={q}
-                                                        onClick={() => {
-                                                            changeQuality(q);
-                                                            setShowQualityMenu(false);
-                                                        }}
-                                                        className={`w-full text-left px-3 py-2 text-[10px] tracking-widest uppercase rounded-lg transition-colors ${currentQuality === q ? 'bg-white text-black font-bold' : 'text-white hover:bg-white/10'}`}
-                                                    >
-                                                        {q === 'auto' ? 'AUTO' : q.toUpperCase()}
-                                                    </button>
-                                                ))
-                                            ) : (
-                                                <div className="px-3 py-2 text-[10px] text-gray-500">FETCHING...</div>
-                                            )}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
+                            {/* Right Controls */}
+                            <div className="flex-1 flex justify-end items-center space-x-10 md:space-x-16">
+                                <div className="relative group">
+                                    <button
+                                        onClick={() => setShowQualityMenu(!showQualityMenu)}
+                                        className={`transition-colors flex items-center space-x-1 ${showQualityMenu ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                                    >
+                                        <span className="text-[9px] font-bold tracking-widest uppercase">HD</span>
+                                        <ChevronDown className={`w-3 h-3 transition-transform ${showQualityMenu ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    
+                                    <AnimatePresence>
+                                        {showQualityMenu && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                className="absolute bottom-full right-0 mb-4 bg-black/80 backdrop-blur-xl border border-white/10 p-2 rounded-xl min-w-[120px] shadow-2xl z-[90] overflow-hidden"
+                                            >
+                                                <div className="text-[8px] tracking-[0.2em] text-gray-500 font-bold uppercase mb-2 px-2">QUALITY</div>
+                                                {availableQualities.length > 0 ? (
+                                                    availableQualities.map((q) => (
+                                                        <button
+                                                            key={q}
+                                                            onClick={() => {
+                                                                changeQuality(q);
+                                                                setShowQualityMenu(false);
+                                                            }}
+                                                            className={`w-full text-left px-3 py-2 text-[10px] tracking-widest uppercase rounded-lg transition-colors ${currentQuality === q ? 'bg-white text-black font-bold' : 'text-white hover:bg-white/10'}`}
+                                                        >
+                                                            {q === 'auto' ? 'AUTO' : q.toUpperCase()}
+                                                        </button>
+                                                    ))
+                                                ) : (
+                                                    <div className="px-3 py-2 text-[10px] text-gray-500">FETCHING...</div>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
 
-                            <button
-                                onClick={toggleRepeat}
-                                className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                            >
-                                <Repeat size={14} strokeWidth={1.5} />
-                                {repeatMode === 'one' && <span className="absolute -top-1 -right-1 text-[8px] font-bold">1</span>}
-                            </button>
+                                <button
+                                    onClick={toggleRepeat}
+                                    className={`transition-colors relative ${repeatMode !== 'off' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    <Repeat size={14} strokeWidth={1.5} />
+                                    {repeatMode === 'one' && <span className="absolute -top-1 -right-1 text-[8px] font-bold">1</span>}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
