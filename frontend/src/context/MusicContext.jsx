@@ -463,11 +463,20 @@ export const MusicProvider = ({ children }) => {
         return soundRef.current?.duration() || 0;
     };
 
+    // Helper: does the audio URL look like a video file?
+    const audioUrlIsVideo = (url) => {
+        if (!url) return false;
+        const lower = url.toLowerCase();
+        return lower.includes('.mp4') || lower.includes('.webm') || lower.includes('.mov') || lower.includes('.mkv');
+    };
+
     const isVideoAvailable = !!(currentSong && (
         currentSong.isYoutube || 
         currentSong._id?.toString().includes('yt_') || 
         currentSong.videoId ||
         currentSong.audioMimeType?.startsWith('video/') ||
+        isDriveVideo || // set by playSong when audioMimeType starts with 'video/'
+        audioUrlIsVideo(currentSong.audioUrl) ||
         (!currentSong.audioUrl || currentSong.audioUrl === '') // no audio URL = video-only source
     ));
 
