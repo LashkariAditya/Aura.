@@ -16,7 +16,11 @@
  * the proxy can still fetch the file from Drive.
  */
 
-const getBackendUrl = () => process.env.BACKEND_URL || 'https://aura-production-6d11.up.railway.app';
+const getBackendUrl = () => {
+    let url = process.env.BACKEND_URL || 'https://aura-music.up.railway.app';
+    if (url.endsWith('/')) url = url.slice(0, -1);
+    return url;
+};
 
 /**
  * Extract Google Drive File ID from any of the known URL formats:
@@ -51,32 +55,35 @@ export function extractDriveId(url) {
  * @param {string|null} url  - The raw URL from MongoDB
  * @returns {string|null}    - Transformed proxy URL (or original)
  */
-export function normalizeCoverUrl(url) {
+export function normalizeCoverUrl(url, baseUrl) {
     if (!url) return url;
     if (url.includes('placehold.co') || url.includes('placeholder.com')) return url; // keep placeholders
 
     const driveId = extractDriveId(url);
     if (!driveId) return url; // unknown format, keep as-is
 
-    return `${getBackendUrl()}/api/songs/image/${driveId}`;
+    const base = baseUrl || getBackendUrl();
+    return `${base}/api/songs/image/${driveId}`;
 }
 
 /**
  * Transform a song document (plain object or Mongoose doc) so that its
  * coverUrl goes through the backend proxy.
  */
-export function normalizeSong(song) {
+export function normalizeSong(song, baseUrl) {
     if (!song) return song;
     const s = song.toObject ? song.toObject() : { ...song };
 
+    const base = baseUrl || getBackendUrl();
+
     // Normalize Cover URL
-    s.coverUrl = normalizeCoverUrl(s.coverUrl);
+    s.coverUrl = normalizeCoverUrl(s.coverUrl, base);
 
     // Normalize Audio URL dynamically 
     if (s.audioUrl) {
         const driveId = extractDriveId(s.audioUrl);
         if (driveId) {
-            s.audioUrl = `${getBackendUrl()}/api/songs/stream/${driveId}`;
+            s.audioUrl = `${base}/api/songs/stream/${driveId}`;
         }
     }
 
@@ -86,20 +93,20 @@ export function normalizeSong(song) {
 /**
  * Transform an array of song documents.
  */
-export function normalizeSongs(songs) {
-    return (songs || []).map(normalizeSong);
+export function normalizeSongs(songs, baseUrl) {
+    return (songs || []).map(song => normalizeSong(song, baseUrl));
 }
 
 /**
  * Transform an artist document so its photoUrl goes through the backend proxy.
  */
-export function normalizeArtist(artist) {
+export function normalizeArtist(artist, baseUrl) {
     if (!artist) return artist;
     const a = artist.toObject ? artist.toObject() : { ...artist };
-    a.photoUrl = normalizeCoverUrl(a.photoUrl);
+    a.photoUrl = normalizeCoverUrl(a.photoUrl, baseUrl);
     return a;
 }
 
-export function normalizeArtists(artists) {
-    return (artists || []).map(normalizeArtist);
+export function normalizeArtists(artists, baseUrl) {
+    return (artists || []).map(a => normalizeArtist(a, baseUrl));
 }

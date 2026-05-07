@@ -9,7 +9,8 @@ export const checkArtist = async (req, res) => {
     try {
         const artist = await Artist.findOne({ name: new RegExp(`^${req.params.name}$`, 'i') });
         if (artist) {
-            return res.json({ success: true, exists: true, artist: normalizeArtist(artist) });
+            const baseUrl = req.protocol + '://' + req.get('host');
+            return res.json({ success: true, exists: true, artist: normalizeArtist(artist, baseUrl) });
         }
         res.json({ success: true, exists: false });
     } catch (error) {
@@ -23,7 +24,8 @@ export const checkArtist = async (req, res) => {
 export const getArtists = async (req, res) => {
     try {
         const artists = await Artist.find({ isActive: true }).sort('name');
-        res.json({ success: true, data: normalizeArtists(artists) });
+        const baseUrl = req.protocol + '://' + req.get('host');
+        res.json({ success: true, data: normalizeArtists(artists, baseUrl) });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

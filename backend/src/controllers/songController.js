@@ -89,10 +89,11 @@ export const getSongs = async (req, res) => {
             .limit(limit)
             .populate('uploadedBy', 'name');
 
+        const baseUrl = req.protocol + '://' + req.get('host');
         res.json({
             success: true,
             data: {
-                songs: normalizeSongs(songs),
+                songs: normalizeSongs(songs, baseUrl),
                 totalPages: Math.ceil(total / limit),
                 currentPage: page,
                 total,
@@ -110,7 +111,8 @@ export const getSongById = async (req, res) => {
     const song = await Song.findById(req.params.id).populate('uploadedBy', 'name');
 
     if (song && song.isActive) {
-        res.json({ success: true, data: { song: normalizeSong(song) } });
+        const baseUrl = req.protocol + '://' + req.get('host');
+        res.json({ success: true, data: { song: normalizeSong(song, baseUrl) } });
     } else {
         res.status(404).json({ message: 'Song not found' });
     }
@@ -254,7 +256,8 @@ export const incrementSongPlays = async (req, res) => {
 export const getTrendingSongs = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const songs = await Song.findTrending(limit);
-    res.json({ success: true, data: { songs: normalizeSongs(songs) } });
+    const baseUrl = req.protocol + '://' + req.get('host');
+    res.json({ success: true, data: { songs: normalizeSongs(songs, baseUrl) } });
 };
 
 // @desc    Get recent songs
@@ -263,7 +266,8 @@ export const getTrendingSongs = async (req, res) => {
 export const getRecentSongs = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const songs = await Song.findRecent(limit);
-    res.json({ success: true, data: { songs: normalizeSongs(songs) } });
+    const baseUrl = req.protocol + '://' + req.get('host');
+    res.json({ success: true, data: { songs: normalizeSongs(songs, baseUrl) } });
 };
 
 // @desc    Get random songs
@@ -272,7 +276,8 @@ export const getRecentSongs = async (req, res) => {
 export const getRandomSongs = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const songs = await Song.findRandom(limit);
-    res.json({ success: true, data: { songs: normalizeSongs(songs) } });
+    const baseUrl = req.protocol + '://' + req.get('host');
+    res.json({ success: true, data: { songs: normalizeSongs(songs, baseUrl) } });
 };
 
 // @desc    Proxy Google Drive stream to avoid CORS issues (supports Range requests for audio)
@@ -519,10 +524,11 @@ export const getLikedSongs = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        const baseUrl = req.protocol + '://' + req.get('host');
         res.json({
             success: true,
             data: {
-                songs: normalizeSongs(user.likedSongs)
+                songs: normalizeSongs(user.likedSongs, baseUrl)
             }
         });
     } catch (error) {

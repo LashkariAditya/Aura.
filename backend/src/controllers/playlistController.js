@@ -210,10 +210,11 @@ export const getUserPlaylists = async (req, res) => {
     const playlists = await Playlist.find({ userId: req.params.userId })
         .populate('songs', 'title artist coverUrl duration');
 
+    const baseUrl = req.protocol + '://' + req.get('host');
     const formattedPlaylists = playlists.map(p => {
         const pObj = p.toObject();
-        pObj.songs = normalizeSongs(pObj.songs);
-        pObj.coverUrl = normalizeCoverUrl(pObj.coverUrl);
+        pObj.songs = normalizeSongs(pObj.songs, baseUrl);
+        pObj.coverUrl = normalizeCoverUrl(pObj.coverUrl, baseUrl);
         return pObj;
     });
 
@@ -262,10 +263,11 @@ export const getPublicPlaylists = async (req, res) => {
             .populate('userId', 'name avatar')
             .populate('songs', 'title artist coverUrl');
 
+        const baseUrl = req.protocol + '://' + req.get('host');
         const formattedPlaylists = playlists.map(p => {
             const pObj = p.toObject();
-            pObj.songs = normalizeSongs(pObj.songs);
-            pObj.coverUrl = normalizeCoverUrl(pObj.coverUrl);
+            pObj.songs = normalizeSongs(pObj.songs, baseUrl);
+            pObj.coverUrl = normalizeCoverUrl(pObj.coverUrl, baseUrl);
             return pObj;
         });
 
@@ -310,9 +312,10 @@ export const getPlaylistById = async (req, res) => {
         (req.user && playlist.userId._id.toString() === req.user._id.toString()) ||
         (code && playlist.shareCode === code)
     )) {
+        const baseUrl = req.protocol + '://' + req.get('host');
         const playlistObj = playlist.toObject();
-        playlistObj.songs = normalizeSongs(playlistObj.songs);
-        playlistObj.coverUrl = normalizeCoverUrl(playlistObj.coverUrl);
+        playlistObj.songs = normalizeSongs(playlistObj.songs, baseUrl);
+        playlistObj.coverUrl = normalizeCoverUrl(playlistObj.coverUrl, baseUrl);
 
         res.json({ success: true, data: { playlist: playlistObj } });
     } else {

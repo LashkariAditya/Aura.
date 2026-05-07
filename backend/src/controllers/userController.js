@@ -58,10 +58,11 @@ export const getPublicProfile = async (req, res) => {
             }
 
             // Map artist to a user-like structure for the frontend
+            const baseUrl = req.protocol + '://' + req.get('host');
             profileUser = {
                 _id: artist._id,
                 name: artist.name,
-                avatar: normalizeCoverUrl(artist.photoUrl),  // ← proxy the artist photo
+                avatar: normalizeCoverUrl(artist.photoUrl, baseUrl),  // ← proxy the artist photo
                 role: 'Artist',
                 createdAt: artist.createdAt,
                 followers: [],
@@ -82,11 +83,12 @@ export const getPublicProfile = async (req, res) => {
             followingCount = 0;
         }
 
+        const baseUrl = req.protocol + '://' + req.get('host');
         res.json({
             success: true,
             data: {
                 user: profileUser,
-                songs: normalizeSongs(songs),  // ← proxy all song cover URLs
+                songs: normalizeSongs(songs, baseUrl),  // ← proxy all song cover URLs
                 playlists,
                 followersCount,
                 followingCount
