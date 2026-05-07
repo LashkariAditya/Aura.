@@ -49,13 +49,17 @@ export const uploadToGoogleDrive = async (file, folderId = null) => {
             }
         });
 
+        // Determine the correct proxy URL based on file type
+        const mimeType = response.data.mimeType || file.mimetype || '';
+        const isImage = mimeType.startsWith('image/');
+        const endpoint = isImage ? 'image' : 'stream';
+
         return {
             id: fileId,
             size: parseInt(response.data.size) || file.size,
-            mimeType: response.data.mimeType || file.mimetype,
-            // Audio goes through proxy for CORS/Visualizer support
-            // Images use a high-performance direct link
-            url: `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/songs/stream/${fileId}`,
+            mimeType: mimeType,
+            // Images use the image proxy (cached, optimized); audio/video uses stream proxy
+            url: `${process.env.BACKEND_URL || 'http://localhost:5001'}/api/songs/${endpoint}/${fileId}`,
             webViewLink: response.data.webViewLink
         };
     } catch (error) {

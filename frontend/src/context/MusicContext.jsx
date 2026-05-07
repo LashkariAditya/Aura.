@@ -20,6 +20,9 @@ export const MusicProvider = ({ children }) => {
     const [isVideoMode, setIsVideoMode] = useState(false);
     const [availableQualities, setAvailableQualities] = useState([]);
     const [currentQuality, setCurrentQuality] = useState('auto');
+    // isYt / isDriveVideo as BOTH state (for renders) and ref (for callbacks)
+    const [isYt, setIsYt] = useState(false);
+    const [isDriveVideo, setIsDriveVideo] = useState(false);
 
     // Refs for state accessed inside callbacks
     const queueRef = useRef([]);
@@ -30,6 +33,8 @@ export const MusicProvider = ({ children }) => {
     const driveVideoRef = useRef(null);
     const isYtRef = useRef(false);
     const isDriveVideoRef = useRef(false);
+    // Queues a video ID for when the YT player isn't ready yet on first mount
+    const pendingYtIdRef = useRef(null);
 
     // Playback control lock for restricted sync room users
     const canChangeRef = useRef(true);
@@ -88,10 +93,12 @@ export const MusicProvider = ({ children }) => {
         if (!force && !canChangeRef.current) return;
 
         const isYoutube = song._id?.toString().startsWith('yt_') || song.audioUrl?.toString().startsWith('yt_') || song.isYoutube;
-        const isDriveVideo = song.audioMimeType?.startsWith('video/');
+        const isDriveVideoSong = song.audioMimeType?.startsWith('video/');
         
         isYtRef.current = isYoutube;
-        isDriveVideoRef.current = isDriveVideo;
+        isDriveVideoRef.current = isDriveVideoSong;
+        setIsYt(isYoutube);
+        setIsDriveVideo(isDriveVideoSong);
 
         // Clean up previous howler sound
         if (soundRef.current && !isYoutube) {
@@ -107,14 +114,15 @@ export const MusicProvider = ({ children }) => {
             soundRef.current = null;
         }
 
-        // Clean up or prepare Youtube / Drive Video player
-        if (!isYoutube && ytPlayerRef.current) {
-            ytPlayerRef.current.stopVideo();
-        }
-        if (!isDriveVideo && driveVideoRef.current) {
+        // Clean up Drive Video player if switching away from it
+        if (!isDriveVideoSong && driveVideoRef.current) {
             driveVideoRef.current.pause();
             driveVideoRef.current.removeAttribute('src');
             driveVideoRef.current.load(); // fully reset the element
+        }
+        // Stop YouTube if switching away (but never destroy — keep it mounted)
+        if (!isYoutube && ytPlayerRef.current) {
+            try { ytPlayerRef.current.stopVideo(); } catch (_) {}
         }
 
         if (songQueue.length > 0) {
@@ -128,8 +136,10 @@ export const MusicProvider = ({ children }) => {
 
         setCurrentSong(song);
         
-        // Reset video mode if switching to a non-video/non-drive-video song
-        if (!isYoutube && !isDriveVideo) {
+        // Auto-enable video mode for Drive video songs; disable for audio-only
+        if (isDriveVideoSong) {
+            setIsVideoMode(true);
+        } else if (!isYoutube) {
             setIsVideoMode(false);
         }
         setIsLoading(true);
@@ -139,16 +149,34 @@ export const MusicProvider = ({ children }) => {
             if (Howler.ctx && Howler.ctx.state === 'running') {
                 Howler.ctx.suspend(); // Save CPU if possible
             }
-            if (ytPlayerRef.current) {
-                let ytId = song._id?.toString().startsWith('yt_') ? song._id.replace('yt_', '') : song.audioUrl?.replace('yt_', '');
-                if (!ytId && song.isYoutube) ytId = song.audioUrl;
-
-                ytPlayerRef.current.loadVideoById(ytId);
-                ytPlayerRef.current.playVideo();
-                ytPlayerRef.current.setVolume(volume);
-                startTimer();
+            // Extract the raw 11-char YouTube video ID
+            let ytId = null;
+            if (song._id?.toString().startsWith('yt_')) {
+                ytId = song._id.replace('yt_', '');
+            } else if (song.audioUrl?.startsWith('yt_')) {
+                ytId = song.audioUrl.replace('yt_', '');
+            } else if (song.videoId) {
+                ytId = song.videoId;
+            } else if (song.audioUrl?.length === 11) {
+                ytId = song.audioUrl;
             }
-        } else if (isDriveVideo) {
+
+            if (ytPlayerRef.current) {
+                try {
+                    ytPlayerRef.current.loadVideoById(ytId);
+                    ytPlayerRef.current.setVolume(volume);
+                    startTimer();
+                } catch (err) {
+                    // Player ref is stale (e.g. after HMR). Queue the ID for onReady.
+                    console.warn('YT_PLAYER_STALE, queuing:', ytId, err.message);
+                    pendingYtIdRef.current = ytId;
+                    ytPlayerRef.current = null;
+                }
+            } else {
+                // Player not ready yet — queue the ID; onReady will handle it
+                pendingYtIdRef.current = ytId;
+            }
+        } else if (isDriveVideoSong) {
             if (Howler.ctx && Howler.ctx.state === 'running') {
                 Howler.ctx.suspend();
             }
@@ -440,8 +468,7 @@ export const MusicProvider = ({ children }) => {
         currentSong._id?.toString().includes('yt_') || 
         currentSong.videoId ||
         currentSong.audioMimeType?.startsWith('video/') ||
-        (!currentSong.audioUrl || currentSong.audioUrl === '') ||
-        (currentSong.title && currentSong.artist) // Enable fallback video search or visualizer mode
+        (!currentSong.audioUrl || currentSong.audioUrl === '') // no audio URL = video-only source
     ));
 
     return (
@@ -488,7 +515,8 @@ export const MusicProvider = ({ children }) => {
                         ytPlayerRef.current.setPlaybackQuality(q);
                         setCurrentQuality(q);
                     }
-                }
+                },
+                setIsVideoMode,
             }}
         >
             {children}
@@ -496,37 +524,54 @@ export const MusicProvider = ({ children }) => {
                 Important note: To bypass backend timeouts, the best method always integrates playback directly into the frontend context block! */}
             <div
                 className={
-                    isVideoMode && (isYtRef.current || isDriveVideoRef.current)
+                    isVideoMode && (isYt || isDriveVideo)
                         ? "fixed top-0 left-0 w-full h-screen z-[65] bg-black transition-all duration-500 overflow-hidden flex items-center justify-center pointer-events-none"
-                        : "fixed overflow-hidden opacity-0 pointer-events-none w-0 h-0"
+                        : "fixed overflow-hidden pointer-events-none"
                 }
-                style={!isVideoMode ? { zIndex: -9999 } : {}}
+                style={!isVideoMode ? { opacity: 0, width: 0, height: 0, zIndex: -9999 } : {}}
             >
-                {isYtRef.current && currentSong && (
+                {/* YouTube player is ALWAYS mounted — never unmount it.
+                    Conditional unmounting destroys the iframe and leaves ytPlayerRef stale,
+                    causing "Cannot read src of null" and error code 2 on the next play.
+                    Visibility is controlled purely via CSS/pointer-events. */}
+                <div
+                    style={{
+                        position: 'absolute', inset: 0,
+                        opacity: isYt ? 1 : 0,
+                        pointerEvents: 'none',
+                        zIndex: isYt ? 1 : -1
+                    }}
+                >
                     <YouTube
-                        videoId={
-                            currentSong.videoId || 
-                            (currentSong.audioUrl?.length === 11 ? currentSong.audioUrl : null) || 
-                            (currentSong._id?.startsWith('yt_') ? currentSong._id.replace('yt_', '') : null) ||
-                            ''
-                        }
+                        videoId=""
                         opts={{
                             height: '100%',
                             width: '100%',
                             playerVars: {
-                                autoplay: 1,
+                                autoplay: 0,
                                 controls: 0,
                                 disablekb: 1,
                                 fs: 0,
                                 rel: 0,
                                 modestbranding: 1,
                                 enablejsapi: 1,
-                                origin: window.location.origin
+                                origin: window.location.origin,
+                                playsinline: 1,
                             },
                         }}
                         onReady={(event) => {
                             ytPlayerRef.current = event.target;
                             ytPlayerRef.current.setVolume(volume);
+                            // Play any video that was queued before the player was ready
+                            if (pendingYtIdRef.current) {
+                                try {
+                                    ytPlayerRef.current.loadVideoById(pendingYtIdRef.current);
+                                    ytPlayerRef.current.setVolume(volume);
+                                } catch (err) {
+                                    console.error('YT_PENDING_PLAY_FAILED:', err.message);
+                                }
+                                pendingYtIdRef.current = null;
+                            }
                         }}
                         onStateChange={(event) => {
                             const YTState = { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3 };
@@ -534,7 +579,6 @@ export const MusicProvider = ({ children }) => {
                                 setIsPlaying(true);
                                 setIsLoading(false);
                                 startTimer();
-                                
                                 // Capture available qualities once playing
                                 if (ytPlayerRef.current?.getAvailableQualityLevels) {
                                     setAvailableQualities(ytPlayerRef.current.getAvailableQualityLevels());
@@ -552,11 +596,11 @@ export const MusicProvider = ({ children }) => {
                         onError={(e) => {
                             console.error('YOUTUBE_PLAYER_ERROR', e);
                             setIsLoading(false);
-                            nextSong(true);
+                            if (isYtRef.current) nextSong(true);
                         }}
-                        className="w-full h-full pointer-events-none select-none flex items-center justify-center"
+                        className="w-full h-full pointer-events-none select-none"
                     />
-                )}
+                </div>
 
                 {/* Drive Video Player — always in DOM so driveVideoRef is available when playSong runs.
                     Source is set programmatically in playSong(), not via prop, to avoid loading when idle. */}
