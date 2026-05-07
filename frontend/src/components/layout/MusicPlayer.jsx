@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, SkipForward, SkipBack, Volume2, Maximize2, Repeat, Shuffle, Heart } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Maximize2, Repeat, Shuffle, Heart, Video } from 'lucide-react';
 import { useMusic } from '../../context/MusicContext';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
@@ -18,13 +18,17 @@ const MusicPlayer = () => {
         previousSong,
         volume,
         changeVolume,
+        isMuted,
+        toggleMute,
         isShuffle,
         toggleShuffle,
         repeatMode,
         toggleRepeat,
         isLiked,
-        toggleLike
-
+        toggleLike,
+        isVideoAvailable,
+        toggleVideoMode,
+        isVideoMode,
     } = useMusic();
 
     const location = useLocation();
@@ -198,7 +202,20 @@ const MusicPlayer = () => {
                 {/* Additional Actions */}
                 <div className="hidden md:flex items-center justify-end space-x-8 min-w-0 pr-2">
                     <div className="flex items-center space-x-4 group w-32 shrink-0">
-                        <Volume2 size={16} className="text-gray-300 group-hover:text-foreground transition-colors" />
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleMute();
+                            }}
+                            className="text-gray-300 hover:text-foreground transition-colors p-1"
+                            title={isMuted || volume === 0 ? "Unmute" : "Mute"}
+                        >
+                            {isMuted || volume === 0 ? (
+                                <VolumeX size={16} />
+                            ) : (
+                                <Volume2 size={16} />
+                            )}
+                        </button>
                         <div className="flex-1 h-[1px] bg-border relative cursor-pointer"
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -213,6 +230,19 @@ const MusicPlayer = () => {
                             />
                         </div>
                     </div>
+
+                    {isVideoAvailable && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleVideoMode();
+                            }}
+                            className={`transition-colors shrink-0 p-2 ${isVideoMode ? 'text-foreground' : 'text-gray-300 hover:text-foreground'}`}
+                            title={isVideoMode ? 'Switch to Audio' : 'Watch Video'}
+                        >
+                            <Video size={16} strokeWidth={1.5} />
+                        </button>
+                    )}
 
                     <button
                         onClick={(e) => {

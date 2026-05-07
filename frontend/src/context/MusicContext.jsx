@@ -12,6 +12,7 @@ export const MusicProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [volume, setVolume] = useState(70);
+    const [isMuted, setIsMuted] = useState(false);
     const [queue, setQueue] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isShuffle, setIsShuffle] = useState(false);
@@ -28,6 +29,7 @@ export const MusicProvider = ({ children }) => {
     const queueRef = useRef([]);
     const currentIndexRef = useRef(0);
     const isShuffleRef = useRef(false);
+    const prevVolumeRef = useRef(70);
     const repeatModeRef = useRef('off');
     const ytPlayerRef = useRef(null);
     const driveVideoRef = useRef(null);
@@ -367,6 +369,11 @@ export const MusicProvider = ({ children }) => {
     }, []);
 
     const changeVolume = (value) => {
+        if (value > 0 && isMuted) {
+            setIsMuted(false);
+        } else if (value === 0 && !isMuted) {
+            setIsMuted(true);
+        }
         setVolume(value);
         if (isYtRef.current && ytPlayerRef.current) {
             ytPlayerRef.current.setVolume(value);
@@ -374,6 +381,16 @@ export const MusicProvider = ({ children }) => {
             driveVideoRef.current.volume = value / 100;
         } else if (soundRef.current) {
             soundRef.current.volume(value / 100);
+        }
+    };
+
+    const toggleMute = () => {
+        if (isMuted) {
+            const restoredVolume = prevVolumeRef.current > 0 ? prevVolumeRef.current : 70;
+            changeVolume(restoredVolume);
+        } else {
+            prevVolumeRef.current = volume;
+            changeVolume(0);
         }
     };
 
@@ -511,6 +528,8 @@ export const MusicProvider = ({ children }) => {
                 setPlaying,
                 seek,
                 changeVolume,
+                isMuted,
+                toggleMute,
                 nextSong,
                 previousSong,
                 addToQueue,
