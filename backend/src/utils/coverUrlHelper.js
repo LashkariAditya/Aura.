@@ -16,7 +16,7 @@
  * the proxy can still fetch the file from Drive.
  */
 
-const getBackendUrl = () => process.env.BACKEND_URL || 'https://aura-production-ff01.up.railway.app';
+const getBackendUrl = () => process.env.BACKEND_URL || 'https://aura-production-6d11.up.railway.app';
 
 /**
  * Extract Google Drive File ID from any of the known URL formats:
