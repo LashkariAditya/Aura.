@@ -407,6 +407,20 @@ export const MusicProvider = ({ children }) => {
         currentIndexRef.current = prevIdx;
     };
 
+    const addToQueue = (song) => {
+        const currentQueue = queueRef.current;
+        const exists = currentQueue.find(s => s._id === song._id);
+        if (!exists) {
+            const newQueue = [...currentQueue, song];
+            setQueue(newQueue);
+            queueRef.current = newQueue;
+            // Optimistically update if playing the first song in queue
+            if (currentQueue.length === 0) {
+                playSong(song, [song]);
+            }
+        }
+    };
+
     const handleSongEnd = () => {
         const mode = repeatModeRef.current;
         const currentQueue = queueRef.current;
@@ -499,6 +513,7 @@ export const MusicProvider = ({ children }) => {
                 changeVolume,
                 nextSong,
                 previousSong,
+                addToQueue,
                 toggleShuffle,
                 toggleRepeat,
                 isLiked,

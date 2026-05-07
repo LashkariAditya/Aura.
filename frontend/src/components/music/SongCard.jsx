@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, MoreHorizontal } from 'lucide-react';
+import { Heart, MoreHorizontal, Plus } from 'lucide-react';
 import { useMusic } from '../../context/MusicContext';
 import { useAuth } from '../../context/AuthContext';
 import songService from '../../services/songService';
@@ -10,7 +10,7 @@ import { useMobileInView } from '../../hooks/useMobileInView';
 import AddToPlaylistModal from './AddToPlaylistModal';
 
 const SongCard = ({ song, queue = [], aspectRatio = 'aspect-[4/5]', className = "" }) => {
-    const { playSong, currentSong, isPlaying, togglePlay } = useMusic();
+    const { playSong, currentSong, isPlaying, togglePlay, addToQueue } = useMusic();
     const { user } = useAuth();
     const { ref: cardRef, isInView, isMobile } = useMobileInView(0.5);
     const [isLiked, setIsLiked] = useState(
@@ -122,6 +122,16 @@ const SongCard = ({ song, queue = [], aspectRatio = 'aspect-[4/5]', className = 
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
+                                addToQueue(song);
+                            }}
+                            className="text-gray-400 hover:text-foreground transition-colors"
+                            title="Add to queue"
+                        >
+                            <Plus size={16} />
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
                                 if (song._id?.toString().startsWith('yt_')) {
                                     toast.error('YOUTUBE LINKS CANNOT BE ADDED TO PLAYLISTS');
                                     return;
@@ -133,6 +143,7 @@ const SongCard = ({ song, queue = [], aspectRatio = 'aspect-[4/5]', className = 
                                 setIsModalOpen(true);
                             }}
                             className="text-gray-400 hover:text-foreground transition-colors"
+                            title="Add to playlist"
                         >
                             <MoreHorizontal size={16} />
                         </button>

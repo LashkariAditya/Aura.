@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMobileInView } from '../../hooks/useMobileInView';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Plus } from 'lucide-react';
+import { useMusic } from '../../context/MusicContext';
 
 const SongListItemImage = ({ song }) => {
     const [imageError, setImageError] = useState(false);
@@ -24,6 +25,8 @@ const SongListItemImage = ({ song }) => {
 };
 
 const SongListRow = ({ song, queue, index, playSong, onRemove }) => {
+    const { addToQueue } = useMusic();
+
     return (
         <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -52,18 +55,32 @@ const SongListRow = ({ song, queue, index, playSong, onRemove }) => {
                 <p className="text-[11px] tracking-widest text-gray-400 font-mono font-bold">
                     {new Date(song.releaseDate || song.createdAt || Date.now()).getFullYear()}
                 </p>
-                {onRemove && (
+                
+                <div className="flex items-center space-x-2">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onRemove(song._id);
+                            addToQueue(song);
                         }}
-                        className="text-gray-400 hover:text-red-500 transition-colors p-2"
-                        title="Remove from playlist"
+                        className="text-gray-400 hover:text-foreground transition-colors p-2 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        title="Add to queue"
                     >
-                        <Trash2 size={16} />
+                        <Plus size={16} />
                     </button>
-                )}
+
+                    {onRemove && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRemove(song._id);
+                            }}
+                            className="text-gray-400 hover:text-red-500 transition-colors p-2"
+                            title="Remove from playlist"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
+                </div>
             </div>
         </motion.div>
     );
