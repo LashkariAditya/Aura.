@@ -10,7 +10,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001';
 
 export const SyncProvider = ({ children }) => {
     const { user } = useAuth();
-    const { playSong, togglePlay, setPlaying, seek, currentSong, isPlaying, currentTime, setPlaybackLock } = useMusic();
+    const { playSong, togglePlay, setPlaying, seek, currentSong, isPlaying, currentTime, getCurrentTime, setPlaybackLock } = useMusic();
 
     const [socket, setSocket] = useState(null);
     const [roomCode, setRoomCode] = useState(null);
@@ -80,32 +80,36 @@ export const SyncProvider = ({ children }) => {
         }
     }, [socket, roomCode, isHost, user]);
 
-    const updatePlayback = useCallback((state) => {
+    const updatePlayback = useCallback((state, forceBroadcast = false) => {
         if (socket && roomCode && (isHost || isKing || isCollaborative)) {
             const uid = user ? (user._id || user.id) : null;
             const targetSongId = state.songId || currentSong?._id || currentSong?.id || currentSong?.audioUrl;
+            const liveTime = getCurrentTime ? getCurrentTime() : (state.currentTime !== undefined ? state.currentTime : 0);
+            const targetPlaying = state.isPlaying !== undefined ? state.isPlaying : isPlaying;
 
             // Check if this update is actually a change to avoid redundant traffic
-            const isChange = state.isPlaying !== lastBroadcastData.current.isPlaying ||
+            const isChange = forceBroadcast ||
+                targetPlaying !== lastBroadcastData.current.isPlaying ||
                 targetSongId !== lastBroadcastData.current.songId ||
-                Math.abs(state.currentTime - lastBroadcastData.current.time) > 0.8;
+                Math.abs(liveTime - lastBroadcastData.current.time) > 0.5;
 
             if (isChange) {
                 socket.emit('playback_update', {
                     roomCode,
-                    ...state,
+                    isPlaying: targetPlaying,
+                    currentTime: liveTime,
                     songId: targetSongId,
                     songData: currentSong,
                     userId: uid
                 });
                 lastBroadcastData.current = {
-                    isPlaying: state.isPlaying,
+                    isPlaying: targetPlaying,
                     songId: targetSongId,
-                    time: state.currentTime
+                    time: liveTime
                 };
             }
         }
-    }, [socket, roomCode, isHost, isKing, isCollaborative, user, currentSong]);
+    }, [socket, roomCode, isHost, isKing, isCollaborative, user, currentSong, getCurrentTime, isPlaying]);
 
     // Update playback lock state
     const canControlPlayback = !roomCode || isHost || isKing || isCollaborative;
@@ -161,7 +165,12 @@ export const SyncProvider = ({ children }) => {
                 }
 
                 if (data.isPlaying !== undefined) setPlaying(data.isPlaying, true);
-                if (data.currentTime !== undefined && Math.abs(data.currentTime - timeRef.current) > 0.3) seek(data.currentTime, false, true);
+                if (data.currentTime !== undefined) {
+                    const myTime = getCurrentTime ? getCurrentTime() : timeRef.current;
+                    if (Math.abs(data.currentTime - myTime) > 0.3) {
+                        seek(data.currentTime, false, true);
+                    }
+                }
             }
         });
 
@@ -202,8 +211,9 @@ export const SyncProvider = ({ children }) => {
             }
 
             if (adjustedTime !== undefined) {
-                const drift = Math.abs(adjustedTime - timeRef.current);
-                if (drift > 0.25) { // 250ms precision threshold
+                const myLiveTime = getCurrentTime ? getCurrentTime() : timeRef.current;
+                const drift = Math.abs(adjustedTime - myLiveTime);
+                if (drift > 0.3) { // 300ms precision threshold
                     seek(adjustedTime, false, true);
                 }
             }
@@ -219,7 +229,7 @@ export const SyncProvider = ({ children }) => {
             socket.off('playback_sync');
             socket.off('new_message');
         };
-    }, [socket, user, isHost, isKing, isCollaborative, playSong, setPlaying, seek]);
+    }, [socket, user, isHost, isKing, isCollaborative, playSong, setPlaying, seek, getCurrentTime]);
 
     const sendMessage = (text) => {
         if (socket && roomCode) {
@@ -227,22 +237,23 @@ export const SyncProvider = ({ children }) => {
         }
     };
 
-    // Host/King: Periodic sync (Heartbeat) - Sends time every 1.5s for tight sync
+    // Host/King: Periodic sync (Heartbeat) - Sends live time every 1.5s to keep all members tightly synced
     useEffect(() => {
         if (!roomCode || (!isHost && !isKing && !isCollaborative)) return;
 
         const interval = setInterval(() => {
             if (isPlaying) {
+                const liveTime = getCurrentTime ? getCurrentTime() : 0;
                 updatePlayback({
-                    isPlaying,
-                    currentTime,
+                    isPlaying: true,
+                    currentTime: liveTime,
                     songId: currentSong?._id || currentSong?.id || currentSong?.audioUrl
-                });
+                }, true);
             }
         }, 1500);
 
         return () => clearInterval(interval);
-    }, [isPlaying, currentTime, currentSong, roomCode, isHost, isKing, isCollaborative, updatePlayback]);
+    }, [isPlaying, currentSong, roomCode, isHost, isKing, isCollaborative, updatePlayback, getCurrentTime]);
 
     // Host/King: Immediate sync on state change (Play/Pause/Track)
     useEffect(() => {

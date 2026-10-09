@@ -494,25 +494,40 @@ export const MusicProvider = ({ children }) => {
         repeatModeRef.current = nextMode;
     };
 
-    const getCurrentTime = () => {
+    const getCurrentTime = useCallback(() => {
         if (isYtRef.current && ytPlayerRef.current) {
-            return ytPlayerRef.current.getCurrentTime() || 0;
+            try {
+                return ytPlayerRef.current.getCurrentTime() || 0;
+            } catch (_) {
+                return 0;
+            }
         }
         if (isDriveVideoRef.current && driveVideoRef.current) {
             return driveVideoRef.current.currentTime || 0;
         }
-        return soundRef.current?.seek() || 0;
-    };
+        if (soundRef.current) {
+            try {
+                const pos = soundRef.current.seek();
+                return (typeof pos === 'number' && !isNaN(pos)) ? pos : 0;
+            } catch (_) {
+                return 0;
+            }
+        }
+        return 0;
+    }, []);
 
-    const getDuration = () => {
+    const getDuration = useCallback(() => {
         if (isYtRef.current && ytPlayerRef.current) {
-            return ytPlayerRef.current.getDuration() || 0;
+            try { return ytPlayerRef.current.getDuration() || 0; } catch (_) { return 0; }
         }
         if (isDriveVideoRef.current && driveVideoRef.current) {
             return driveVideoRef.current.duration || 0;
         }
-        return soundRef.current?.duration() || 0;
-    };
+        if (soundRef.current) {
+            try { return soundRef.current.duration() || 0; } catch (_) { return 0; }
+        }
+        return 0;
+    }, []);
 
     // Helper: does the audio URL look like a video file?
     const audioUrlIsVideo = (url) => {
@@ -557,6 +572,7 @@ export const MusicProvider = ({ children }) => {
                 toggleRepeat,
                 isLiked,
                 toggleLike,
+                getCurrentTime,
                 currentTime: getCurrentTime(),
                 duration: getDuration(),
                 analyser: analyserRef.current,
