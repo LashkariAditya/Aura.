@@ -3,6 +3,11 @@ import Room from '../models/Room.js';
 import User from '../models/User.js';
 import Song from '../models/Song.js';
 
+// Active sockets per room for real-time listener tracking
+// activeRoomSockets: Map<roomCode, Map<socketId, listenerObj>>
+const activeRoomSockets = new Map();
+const socketToRoom = new Map();
+
 const resolveUserId = async (userId) => {
     if (!userId) return null;
     if (typeof userId === 'string' && userId.startsWith('kp_')) {
@@ -15,7 +20,7 @@ const resolveUserId = async (userId) => {
     return userId;
 };
 
-const formatRoomData = async (room) => {
+const formatRoomData = async (room, roomCode) => {
     if (!room) return null;
     const roomObj = room.toObject ? room.toObject() : room;
 
@@ -30,24 +35,39 @@ const formatRoomData = async (room) => {
         }
     }
 
-    // Participants
+    // Merge DB participants with currently connected active sockets
+    const activeMap = activeRoomSockets.get(roomCode) || new Map();
+    const activeListeners = Array.from(activeMap.values());
+
+    const combinedParticipantsMap = new Map();
+
+    // 1. Add active connected sockets first
+    for (const listener of activeListeners) {
+        combinedParticipantsMap.set(listener.socketId, listener);
+    }
+
+    // 2. Add DB participants
     if (Array.isArray(roomObj.participants)) {
-        const populatedParticipants = [];
         for (const pId of roomObj.participants) {
             const pIdStr = pId?._id ? pId._id.toString() : pId?.toString();
             if (pIdStr && mongoose.Types.ObjectId.isValid(pIdStr)) {
                 const pUser = await User.findById(pIdStr).select('name email avatar role');
                 if (pUser) {
-                    populatedParticipants.push(pUser);
-                } else {
-                    populatedParticipants.push({ _id: pIdStr, name: 'Listener', avatar: '' });
+                    const uIdStr = pUser._id.toString();
+                    if (!Array.from(combinedParticipantsMap.values()).some(l => l._id?.toString() === uIdStr)) {
+                        combinedParticipantsMap.set(uIdStr, {
+                            _id: uIdStr,
+                            name: pUser.name,
+                            avatar: pUser.avatar,
+                            role: pUser.role
+                        });
+                    }
                 }
-            } else if (pIdStr) {
-                populatedParticipants.push({ _id: pIdStr, name: 'Guest Listener', avatar: '' });
             }
         }
-        roomObj.participants = populatedParticipants;
     }
+
+    roomObj.participants = Array.from(combinedParticipantsMap.values());
 
     // Kings
     if (Array.isArray(roomObj.kings)) {
@@ -84,12 +104,36 @@ const socketHandler = (io) => {
     io.on('connection', (socket) => {
         console.log('New client connected:', socket.id);
 
-        socket.on('join_room', async ({ roomCode, userId: rawUserId }) => {
+        socket.on('join_room', async ({ roomCode, userId: rawUserId, userProfile }) => {
             try {
                 let userId = await resolveUserId(rawUserId);
                 if (!userId) userId = `guest_${socket.id.substring(0, 8)}`;
-                console.log(`SYNC_DEBUG: join_room attempt - User: ${userId}, Room: ${roomCode}`);
+                console.log(`SYNC_DEBUG: join_room attempt - User: ${userId}, Room: ${roomCode}, Socket: ${socket.id}`);
+                
                 socket.join(roomCode);
+                socketToRoom.set(socket.id, roomCode);
+
+                // Build listener metadata for active room tracking
+                let listenerObj = {
+                    socketId: socket.id,
+                    _id: userId,
+                    name: userProfile?.name || 'Guest Listener',
+                    avatar: userProfile?.avatar || ''
+                };
+
+                if (mongoose.Types.ObjectId.isValid(userId)) {
+                    const dbUser = await User.findById(userId).select('name avatar role');
+                    if (dbUser) {
+                        listenerObj.name = dbUser.name;
+                        listenerObj.avatar = dbUser.avatar;
+                        listenerObj.role = dbUser.role;
+                    }
+                }
+
+                if (!activeRoomSockets.has(roomCode)) {
+                    activeRoomSockets.set(roomCode, new Map());
+                }
+                activeRoomSockets.get(roomCode).set(socket.id, listenerObj);
 
                 let room = await Room.findOne({ roomCode });
 
@@ -112,7 +156,7 @@ const socketHandler = (io) => {
                     }
                 }
 
-                const roomData = await formatRoomData(room);
+                const roomData = await formatRoomData(room, roomCode);
                 console.log(`SYNC_DEBUG: Emitting room_data for ${roomCode}. Participants: ${roomData?.participants?.length}`);
                 io.to(roomCode).emit('room_data', roomData);
             } catch (error) {
@@ -126,12 +170,19 @@ const socketHandler = (io) => {
                 const room = await Room.findOne({ roomCode });
                 if (room) {
                     const hostId = room.host?._id ? room.host._id.toString() : room.host?.toString();
-                    const isHost = hostId === userId;
+                    const isHost = hostId === userId || socket.id === hostId;
                     const isKing = room.kings?.some(k => (k?._id?.toString() || k?.toString()) === userId);
 
                     if (isHost || isKing || room.isCollaborative) {
-                        // Broadcast immediately to room members
-                        socket.to(roomCode).emit('playback_sync', { isPlaying, currentTime, songId, songData, userId });
+                        // Broadcast immediately to room members with high-precision server timestamp
+                        socket.to(roomCode).emit('playback_sync', {
+                            isPlaying,
+                            currentTime,
+                            songId,
+                            songData,
+                            userId,
+                            timestamp: Date.now()
+                        });
 
                         // Update room state in DB asynchronously
                         room.isPlaying = isPlaying;
@@ -181,7 +232,7 @@ const socketHandler = (io) => {
                             room.kings.push(targetUserId);
                         }
                         await room.save();
-                        const roomData = await formatRoomData(room);
+                        const roomData = await formatRoomData(room, roomCode);
                         io.to(roomCode).emit('room_data', roomData);
                     }
                 }
@@ -192,14 +243,21 @@ const socketHandler = (io) => {
 
         socket.on('leave_room', async ({ roomCode, userId: rawUserId }) => {
             socket.leave(roomCode);
+            if (activeRoomSockets.has(roomCode)) {
+                activeRoomSockets.get(roomCode).delete(socket.id);
+            }
+            socketToRoom.delete(socket.id);
+
             try {
                 const userId = await resolveUserId(rawUserId);
                 const room = await Room.findOne({ roomCode });
                 if (room) {
-                    room.participants = room.participants.filter(p => (p?._id?.toString() || p?.toString()) !== userId);
-                    room.kings = room.kings.filter(k => (k?._id?.toString() || k?.toString()) !== userId);
-                    await room.save();
-                    const roomData = await formatRoomData(room);
+                    if (userId) {
+                        room.participants = room.participants.filter(p => (p?._id?.toString() || p?.toString()) !== userId);
+                        room.kings = room.kings.filter(k => (k?._id?.toString() || k?.toString()) !== userId);
+                        await room.save();
+                    }
+                    const roomData = await formatRoomData(room, roomCode);
                     io.to(roomCode).emit('room_data', roomData);
                 }
             } catch (error) {
@@ -224,8 +282,24 @@ const socketHandler = (io) => {
             }
         });
 
-        socket.on('disconnect', () => {
+        socket.on('disconnect', async () => {
             console.log('Client disconnected:', socket.id);
+            const roomCode = socketToRoom.get(socket.id);
+            if (roomCode) {
+                socketToRoom.delete(socket.id);
+                if (activeRoomSockets.has(roomCode)) {
+                    activeRoomSockets.get(roomCode).delete(socket.id);
+                }
+                try {
+                    const room = await Room.findOne({ roomCode });
+                    if (room) {
+                        const roomData = await formatRoomData(room, roomCode);
+                        io.to(roomCode).emit('room_data', roomData);
+                    }
+                } catch (err) {
+                    console.error('DISCONNECT_ROOM_UPDATE_ERROR:', err);
+                }
+            }
         });
     });
 };

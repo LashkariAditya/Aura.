@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Users, LogOut, Radio, Send, X, ShieldAlert, ShieldCheck, MessageCircle, Crown } from 'lucide-react';
 import { useSync } from '../../context/SyncContext';
 import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 
 const SyncOverlay = ({ isOpen, onClose, onToggleChat }) => {
     const {
@@ -21,6 +22,12 @@ const SyncOverlay = ({ isOpen, onClose, onToggleChat }) => {
 
     const [joinInput, setJoinInput] = useState('');
     const { user } = useAuth();
+
+    const requireAuth = () => {
+        if (user) return true;
+        toast.error('PLEASE LOGIN TO USE SYNC');
+        return false;
+    };
 
     const handleJoin = (e) => {
         e.preventDefault();
@@ -120,12 +127,14 @@ const SyncOverlay = ({ isOpen, onClose, onToggleChat }) => {
                                     <p className="text-[10px] text-white/30 text-center py-4 italic">No participants detected...</p>
                                 ) : (
                                     participants.map((p, idx) => {
-                                        const isCurrentUser = p._id?.toString() === (user?._id || user?.id)?.toString();
-                                        const isRoomHost = p._id?.toString() === hostId?.toString();
-                                        const isRoomKing = kings.some(k => (k._id || k).toString() === p._id?.toString());
+                                        const pId = p._id?.toString() || p.socketId || `listener_${idx}`;
+                                        const currentUserId = (user?._id || user?.id)?.toString();
+                                        const isCurrentUser = Boolean(currentUserId && p._id?.toString() === currentUserId);
+                                        const isRoomHost = p._id?.toString() === hostId?.toString() || p.socketId === hostId?.toString();
+                                        const isRoomKing = kings.some(k => (k._id || k).toString() === pId);
 
                                         return (
-                                            <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 hover:bg-white/[0.08] transition-colors">
+                                            <div key={pId || idx} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 hover:bg-white/[0.08] transition-colors">
                                                 <div className="flex items-center space-x-3 overflow-hidden">
                                                     <div className="w-8 h-8 rounded-full bg-white/10 ring-1 ring-white/20 flex items-center justify-center text-[11px] font-bold text-white overflow-hidden shrink-0">
                                                         {p.avatar ? (

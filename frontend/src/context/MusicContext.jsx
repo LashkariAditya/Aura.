@@ -92,7 +92,7 @@ export const MusicProvider = ({ children }) => {
         return analyserRef.current;
     };
 
-    const playSong = useCallback((song, songQueue = [], force = false) => {
+    const playSong = useCallback((song, songQueue = [], force = false, initialSeekTime = null) => {
         if (!force && !canChangeRef.current) return;
         if (!song) return;
 
@@ -153,6 +153,8 @@ export const MusicProvider = ({ children }) => {
         setIsLoading(true);
         setIsPlaying(true); // Optimistic UI update
 
+        const loadStartTime = Date.now();
+
         if (isYoutube) {
             if (Howler.ctx && Howler.ctx.state === 'running') {
                 Howler.ctx.suspend(); // Save CPU if possible
@@ -171,7 +173,8 @@ export const MusicProvider = ({ children }) => {
 
             if (ytPlayerRef.current) {
                 try {
-                    ytPlayerRef.current.loadVideoById(ytId);
+                    const startSec = initialSeekTime ? Math.max(0, initialSeekTime) : 0;
+                    ytPlayerRef.current.loadVideoById({ videoId: ytId, startSeconds: startSec });
                     ytPlayerRef.current.setVolume(volume);
                     startTimer();
                 } catch (err) {
@@ -191,6 +194,9 @@ export const MusicProvider = ({ children }) => {
             if (driveVideoRef.current) {
                 driveVideoRef.current.src = song.audioUrl;
                 driveVideoRef.current.volume = volume / 100;
+                if (initialSeekTime !== null && initialSeekTime !== undefined) {
+                    driveVideoRef.current.currentTime = initialSeekTime;
+                }
                 driveVideoRef.current.play().catch(e => console.error('DRIVE_VIDEO_PLAY_FAILED:', e));
                 startTimer();
             }
@@ -210,9 +216,17 @@ export const MusicProvider = ({ children }) => {
                     setIsPlaying(true);
                     setIsLoading(false);
                     startTimer();
+                    if (initialSeekTime !== null && initialSeekTime !== undefined && initialSeekTime > 0) {
+                        const elapsedSec = (Date.now() - loadStartTime) / 1000;
+                        sound.seek(initialSeekTime + elapsedSec);
+                    }
                 },
                 onload: () => {
                     setIsLoading(false);
+                    if (initialSeekTime !== null && initialSeekTime !== undefined && initialSeekTime > 0) {
+                        const elapsedSec = (Date.now() - loadStartTime) / 1000;
+                        sound.seek(initialSeekTime + elapsedSec);
+                    }
                 },
                 onloaderror: (id, err) => {
                     console.error('AUDIO_LOAD_ERROR:', err);

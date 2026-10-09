@@ -46,7 +46,8 @@ export const SyncProvider = ({ children }) => {
     const joinRoom = useCallback((code) => {
         if (socket) {
             const uid = user ? (user._id || user.id) : null;
-            socket.emit('join_room', { roomCode: code, userId: uid });
+            const userProfile = user ? { name: user.name, avatar: user.avatar } : { name: 'Guest Listener', avatar: '' };
+            socket.emit('join_room', { roomCode: code, userId: uid, userProfile });
         }
     }, [socket, user]);
 
@@ -87,7 +88,7 @@ export const SyncProvider = ({ children }) => {
             // Check if this update is actually a change to avoid redundant traffic
             const isChange = state.isPlaying !== lastBroadcastData.current.isPlaying ||
                 targetSongId !== lastBroadcastData.current.songId ||
-                Math.abs(state.currentTime - lastBroadcastData.current.time) > 1.0;
+                Math.abs(state.currentTime - lastBroadcastData.current.time) > 0.8;
 
             if (isChange) {
                 socket.emit('playback_update', {
@@ -142,14 +143,15 @@ export const SyncProvider = ({ children }) => {
                 if (songId && songId !== currentId && songId !== lastSyncedSongId.current) {
                     try {
                         lastSyncedSongId.current = songId;
+                        const initialTime = data.currentTime || 0;
                         if (typeof song === 'object' && (song.audioUrl || song.title)) {
-                            playSong(song, [], true);
+                            playSong(song, [], true, initialTime);
                         } else if (typeof songId === 'string' && songId.startsWith('yt_')) {
-                            playSong({ _id: songId, audioUrl: songId, isYoutube: true }, [], true);
+                            playSong({ _id: songId, audioUrl: songId, isYoutube: true }, [], true, initialTime);
                         } else if (typeof songId === 'string' && /^[0-9a-fA-F]{24}$/.test(songId)) {
                             const response = await songService.getSongById(songId);
                             if (response?.success && response?.data?.song) {
-                                playSong(response.data.song, [], true);
+                                playSong(response.data.song, [], true, initialTime);
                             }
                         }
                     } catch (error) {
@@ -159,7 +161,7 @@ export const SyncProvider = ({ children }) => {
                 }
 
                 if (data.isPlaying !== undefined) setPlaying(data.isPlaying, true);
-                if (data.currentTime !== undefined && Math.abs(data.currentTime - timeRef.current) > 0.5) seek(data.currentTime, false, true);
+                if (data.currentTime !== undefined && Math.abs(data.currentTime - timeRef.current) > 0.3) seek(data.currentTime, false, true);
             }
         });
 
@@ -167,9 +169,13 @@ export const SyncProvider = ({ children }) => {
             if (data.isCollaborative !== undefined) setIsCollaborative(data.isCollaborative);
         });
 
-        socket.on('playback_sync', async ({ isPlaying: syncPlaying, currentTime: syncTime, songId, songData, userId: senderId }) => {
+        socket.on('playback_sync', async ({ isPlaying: syncPlaying, currentTime: syncTime, songId, songData, userId: senderId, timestamp: serverTimestamp }) => {
             const currentUserId = (user?._id || user?.id)?.toString();
             if (senderId && senderId === currentUserId) return; // Prevent echo feedback loops
+
+            // Compute exact network latency adjustment
+            const latencySec = serverTimestamp ? Math.max(0, (Date.now() - serverTimestamp) / 1000) : 0;
+            const adjustedTime = (syncTime !== undefined) ? syncTime + latencySec : undefined;
 
             const currentId = songRef.current?._id || songRef.current?.id || songRef.current?.audioUrl;
 
@@ -177,13 +183,13 @@ export const SyncProvider = ({ children }) => {
                 lastSyncedSongId.current = songId || songData?._id;
                 try {
                     if (songData && typeof songData === 'object') {
-                        playSong(songData, [], true);
+                        playSong(songData, [], true, adjustedTime);
                     } else if (typeof songId === 'string' && (songId.startsWith('yt_') || songId.startsWith('http'))) {
-                        playSong({ _id: songId, audioUrl: songId, isYoutube: songId.startsWith('yt_') }, [], true);
+                        playSong({ _id: songId, audioUrl: songId, isYoutube: songId.startsWith('yt_') }, [], true, adjustedTime);
                     } else if (typeof songId === 'string' && /^[0-9a-fA-F]{24}$/.test(songId)) {
                         const response = await songService.getSongById(songId);
                         if (response?.success && response?.data?.song) {
-                            playSong(response.data.song, [], true);
+                            playSong(response.data.song, [], true, adjustedTime);
                         }
                     }
                 } catch (e) {
@@ -195,8 +201,11 @@ export const SyncProvider = ({ children }) => {
                 setPlaying(syncPlaying, true);
             }
 
-            if (syncTime !== undefined && Math.abs(syncTime - timeRef.current) > 0.5) {
-                seek(syncTime, false, true);
+            if (adjustedTime !== undefined) {
+                const drift = Math.abs(adjustedTime - timeRef.current);
+                if (drift > 0.25) { // 250ms precision threshold
+                    seek(adjustedTime, false, true);
+                }
             }
         });
 
@@ -218,7 +227,7 @@ export const SyncProvider = ({ children }) => {
         }
     };
 
-    // Host/King: Periodic sync (Heartbeat) - Sends time every 2.5s if drifting
+    // Host/King: Periodic sync (Heartbeat) - Sends time every 1.5s for tight sync
     useEffect(() => {
         if (!roomCode || (!isHost && !isKing && !isCollaborative)) return;
 
@@ -230,7 +239,7 @@ export const SyncProvider = ({ children }) => {
                     songId: currentSong?._id || currentSong?.id || currentSong?.audioUrl
                 });
             }
-        }, 2500);
+        }, 1500);
 
         return () => clearInterval(interval);
     }, [isPlaying, currentTime, currentSong, roomCode, isHost, isKing, isCollaborative, updatePlayback]);
