@@ -44,15 +44,15 @@ export const SyncProvider = ({ children }) => {
     }, []);
 
     const joinRoom = useCallback((code) => {
-        if (socket && user) {
-            const uid = user._id || user.id;
+        if (socket) {
+            const uid = user ? (user._id || user.id) : null;
             socket.emit('join_room', { roomCode: code, userId: uid });
         }
     }, [socket, user]);
 
     const leaveRoom = useCallback(() => {
-        if (socket && roomCode && user) {
-            const uid = user._id || user.id;
+        if (socket && roomCode) {
+            const uid = user ? (user._id || user.id) : null;
             socket.emit('leave_room', { roomCode, userId: uid });
             setRoomCode(null);
             setParticipants([]);
@@ -66,37 +66,45 @@ export const SyncProvider = ({ children }) => {
     }, [socket, roomCode, user]);
 
     const toggleCollaborative = useCallback(() => {
-        if (socket && roomCode && isHost && user) {
-            const uid = user._id || user.id;
+        if (socket && roomCode && isHost) {
+            const uid = user ? (user._id || user.id) : null;
             socket.emit('toggle_collaborative', { roomCode, userId: uid });
         }
     }, [socket, roomCode, isHost, user]);
 
     const toggleKing = useCallback((targetUserId) => {
-        if (socket && roomCode && isHost && user) {
-            const uid = user._id || user.id;
+        if (socket && roomCode && isHost) {
+            const uid = user ? (user._id || user.id) : null;
             socket.emit('toggle_king', { roomCode, targetUserId, requesterId: uid });
         }
     }, [socket, roomCode, isHost, user]);
 
     const updatePlayback = useCallback((state) => {
         if (socket && roomCode && (isHost || isKing || isCollaborative)) {
-            const uid = user._id || user.id;
+            const uid = user ? (user._id || user.id) : null;
+            const targetSongId = state.songId || currentSong?._id || currentSong?.id || currentSong?.audioUrl;
+
             // Check if this update is actually a change to avoid redundant traffic
             const isChange = state.isPlaying !== lastBroadcastData.current.isPlaying ||
-                state.songId !== lastBroadcastData.current.songId ||
+                targetSongId !== lastBroadcastData.current.songId ||
                 Math.abs(state.currentTime - lastBroadcastData.current.time) > 1.0;
 
             if (isChange) {
-                socket.emit('playback_update', { roomCode, ...state, userId: uid });
+                socket.emit('playback_update', {
+                    roomCode,
+                    ...state,
+                    songId: targetSongId,
+                    songData: currentSong,
+                    userId: uid
+                });
                 lastBroadcastData.current = {
                     isPlaying: state.isPlaying,
-                    songId: state.songId,
+                    songId: targetSongId,
                     time: state.currentTime
                 };
             }
         }
-    }, [socket, roomCode, isHost, isKing, isCollaborative, user]);
+    }, [socket, roomCode, isHost, isKing, isCollaborative, user, currentSong]);
 
     // Update playback lock state
     const canControlPlayback = !roomCode || isHost || isKing || isCollaborative;
@@ -109,6 +117,7 @@ export const SyncProvider = ({ children }) => {
         if (!socket) return;
 
         socket.on('room_data', async (data) => {
+            if (!data) return;
             setRoomCode(data.roomCode);
             setParticipants(data.participants || []);
             setKings(data.kings || []);
@@ -117,7 +126,7 @@ export const SyncProvider = ({ children }) => {
             const hId = (data.host?._id || data.host)?.toString();
 
             setHostId(hId);
-            const isNowHost = currentUserId === hId;
+            const isNowHost = Boolean(currentUserId && hId && currentUserId === hId);
             setIsHost(isNowHost);
 
             const isNowKing = data.kings?.some(k => (k._id || k).toString() === currentUserId);
@@ -127,16 +136,19 @@ export const SyncProvider = ({ children }) => {
 
             if (!isNowHost && !isNowKing && data.currentSong) {
                 const song = data.currentSong;
-                const songId = song._id || song;
+                const songId = typeof song === 'object' ? (song._id || song.id) : song;
+                const currentId = songRef.current?._id || songRef.current?.id;
 
-                if (songId !== songRef.current?._id && songId !== lastSyncedSongId.current) {
+                if (songId && songId !== currentId && songId !== lastSyncedSongId.current) {
                     try {
                         lastSyncedSongId.current = songId;
-                        if (song.audioUrl) {
+                        if (typeof song === 'object' && (song.audioUrl || song.title)) {
                             playSong(song, [], true);
-                        } else {
+                        } else if (typeof songId === 'string' && songId.startsWith('yt_')) {
+                            playSong({ _id: songId, audioUrl: songId, isYoutube: true }, [], true);
+                        } else if (typeof songId === 'string' && /^[0-9a-fA-F]{24}$/.test(songId)) {
                             const response = await songService.getSongById(songId);
-                            if (response.success) {
+                            if (response?.success && response?.data?.song) {
                                 playSong(response.data.song, [], true);
                             }
                         }
@@ -155,20 +167,28 @@ export const SyncProvider = ({ children }) => {
             if (data.isCollaborative !== undefined) setIsCollaborative(data.isCollaborative);
         });
 
-        socket.on('playback_sync', async ({ isPlaying: syncPlaying, currentTime: syncTime, songId, userId: senderId }) => {
+        socket.on('playback_sync', async ({ isPlaying: syncPlaying, currentTime: syncTime, songId, songData, userId: senderId }) => {
             const currentUserId = (user?._id || user?.id)?.toString();
-            if (senderId === currentUserId) return; // Prevent echo feedback loops
+            if (senderId && senderId === currentUserId) return; // Prevent echo feedback loops
 
-            // Everyone follows the broadcast (Host, Kings, and Participants)
-            // The server already validates if the senderId had permission to broadcast
-            const currentId = songRef.current?._id;
+            const currentId = songRef.current?._id || songRef.current?.id || songRef.current?.audioUrl;
 
-            if (songId && songId !== currentId && songId !== lastSyncedSongId.current) {
-                lastSyncedSongId.current = songId;
+            if ((songData || songId) && (songId !== currentId || (songData && songData._id !== currentId)) && songId !== lastSyncedSongId.current) {
+                lastSyncedSongId.current = songId || songData?._id;
                 try {
-                    const response = await songService.getSongById(songId);
-                    if (response.success) playSong(response.data.song, [], true);
-                } catch (e) { console.error(e); }
+                    if (songData && typeof songData === 'object') {
+                        playSong(songData, [], true);
+                    } else if (typeof songId === 'string' && (songId.startsWith('yt_') || songId.startsWith('http'))) {
+                        playSong({ _id: songId, audioUrl: songId, isYoutube: songId.startsWith('yt_') }, [], true);
+                    } else if (typeof songId === 'string' && /^[0-9a-fA-F]{24}$/.test(songId)) {
+                        const response = await songService.getSongById(songId);
+                        if (response?.success && response?.data?.song) {
+                            playSong(response.data.song, [], true);
+                        }
+                    }
+                } catch (e) {
+                    console.error('SYNC_PLAYBACK_SONG_ERROR:', e);
+                }
             }
 
             if (syncPlaying !== undefined && syncPlaying !== playingRef.current) {
@@ -194,7 +214,7 @@ export const SyncProvider = ({ children }) => {
 
     const sendMessage = (text) => {
         if (socket && roomCode) {
-            socket.emit('send_message', { roomCode, message: text, user: user.name });
+            socket.emit('send_message', { roomCode, message: text, user: user?.name || 'Guest' });
         }
     };
 
@@ -207,25 +227,26 @@ export const SyncProvider = ({ children }) => {
                 updatePlayback({
                     isPlaying,
                     currentTime,
-                    songId: currentSong?._id
+                    songId: currentSong?._id || currentSong?.id || currentSong?.audioUrl
                 });
             }
         }, 2500);
 
         return () => clearInterval(interval);
-    }, [isPlaying, currentTime, currentSong?._id, roomCode, isHost, isKing, isCollaborative, updatePlayback]);
+    }, [isPlaying, currentTime, currentSong, roomCode, isHost, isKing, isCollaborative, updatePlayback]);
 
     // Host/King: Immediate sync on state change (Play/Pause/Track)
     useEffect(() => {
         if (!roomCode || (!isHost && !isKing && !isCollaborative)) return;
 
-        console.log('SYNC_DEBUG: Broadcasting state change', { isPlaying, songId: currentSong?._id });
+        const songId = currentSong?._id || currentSong?.id || currentSong?.audioUrl;
+        console.log('SYNC_DEBUG: Broadcasting state change', { isPlaying, songId });
         updatePlayback({
             isPlaying,
             currentTime,
-            songId: currentSong?._id
+            songId
         });
-    }, [isPlaying, currentSong?._id, roomCode, isHost, isKing, isCollaborative, updatePlayback]);
+    }, [isPlaying, currentSong, roomCode, isHost, isKing, isCollaborative, updatePlayback]);
 
     return (
         <SyncContext.Provider value={{

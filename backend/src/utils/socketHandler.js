@@ -1,13 +1,83 @@
-import { Server } from 'socket.io';
+import mongoose from 'mongoose';
 import Room from '../models/Room.js';
 import User from '../models/User.js';
+import Song from '../models/Song.js';
 
 const resolveUserId = async (userId) => {
-    if (userId && typeof userId === 'string' && userId.startsWith('kp_')) {
+    if (!userId) return null;
+    if (typeof userId === 'string' && userId.startsWith('kp_')) {
         const user = await User.findOne({ kindeId: userId });
-        return user ? user._id.toString() : userId;
+        if (user) return user._id.toString();
+    }
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+        return userId.toString();
     }
     return userId;
+};
+
+const formatRoomData = async (room) => {
+    if (!room) return null;
+    const roomObj = room.toObject ? room.toObject() : room;
+
+    // Host
+    if (roomObj.host) {
+        const hIdStr = roomObj.host._id ? roomObj.host._id.toString() : roomObj.host.toString();
+        if (mongoose.Types.ObjectId.isValid(hIdStr)) {
+            const hostUser = await User.findById(hIdStr).select('name email avatar role');
+            if (hostUser) roomObj.host = hostUser;
+        } else {
+            roomObj.host = { _id: hIdStr, name: 'Room Host', avatar: '' };
+        }
+    }
+
+    // Participants
+    if (Array.isArray(roomObj.participants)) {
+        const populatedParticipants = [];
+        for (const pId of roomObj.participants) {
+            const pIdStr = pId?._id ? pId._id.toString() : pId?.toString();
+            if (pIdStr && mongoose.Types.ObjectId.isValid(pIdStr)) {
+                const pUser = await User.findById(pIdStr).select('name email avatar role');
+                if (pUser) {
+                    populatedParticipants.push(pUser);
+                } else {
+                    populatedParticipants.push({ _id: pIdStr, name: 'Listener', avatar: '' });
+                }
+            } else if (pIdStr) {
+                populatedParticipants.push({ _id: pIdStr, name: 'Guest Listener', avatar: '' });
+            }
+        }
+        roomObj.participants = populatedParticipants;
+    }
+
+    // Kings
+    if (Array.isArray(roomObj.kings)) {
+        const populatedKings = [];
+        for (const kId of roomObj.kings) {
+            const kIdStr = kId?._id ? kId._id.toString() : kId?.toString();
+            if (kIdStr && mongoose.Types.ObjectId.isValid(kIdStr)) {
+                const kUser = await User.findById(kIdStr).select('name email avatar role');
+                if (kUser) {
+                    populatedKings.push(kUser);
+                } else {
+                    populatedKings.push({ _id: kIdStr, name: 'Room King', avatar: '' });
+                }
+            } else if (kIdStr) {
+                populatedKings.push({ _id: kIdStr, name: 'Room King', avatar: '' });
+            }
+        }
+        roomObj.kings = populatedKings;
+    }
+
+    // CurrentSong
+    if (roomObj.currentSong) {
+        const songId = typeof roomObj.currentSong === 'object' ? (roomObj.currentSong._id || roomObj.currentSong.id) : roomObj.currentSong;
+        if (typeof songId === 'string' && mongoose.Types.ObjectId.isValid(songId)) {
+            const dbSong = await Song.findById(songId);
+            if (dbSong) roomObj.currentSong = dbSong;
+        }
+    }
+
+    return roomObj;
 };
 
 const socketHandler = (io) => {
@@ -15,57 +85,62 @@ const socketHandler = (io) => {
         console.log('New client connected:', socket.id);
 
         socket.on('join_room', async ({ roomCode, userId: rawUserId }) => {
-            const userId = await resolveUserId(rawUserId);
-            console.log(`SYNC_DEBUG: join_room attempt - User: ${userId}, Room: ${roomCode}`);
-            socket.join(roomCode);
-
             try {
-                let room = await Room.findOne({ roomCode }).populate('currentSong participants kings');
+                let userId = await resolveUserId(rawUserId);
+                if (!userId) userId = `guest_${socket.id.substring(0, 8)}`;
+                console.log(`SYNC_DEBUG: join_room attempt - User: ${userId}, Room: ${roomCode}`);
+                socket.join(roomCode);
+
+                let room = await Room.findOne({ roomCode });
 
                 if (!room) {
                     console.log(`SYNC_DEBUG: Creating new room ${roomCode} for host ${userId}`);
                     room = await Room.create({
                         roomCode,
                         host: userId,
-                        participants: userId ? [userId] : []
+                        participants: [userId]
                     });
-                    room = await Room.findById(room._id).populate('currentSong participants kings');
-                } else if (userId) {
+                } else {
                     const isParticipant = room.participants.some(p =>
-                        (p._id?.toString() || p.toString()) === userId
+                        (p?._id?.toString() || p?.toString()) === userId
                     );
 
                     if (!isParticipant) {
                         console.log(`SYNC_DEBUG: Adding participant ${userId} to room ${roomCode}`);
                         room.participants.push(userId);
                         await room.save();
-                        room = await Room.findById(room._id).populate('currentSong participants kings');
                     }
                 }
 
-                console.log(`SYNC_DEBUG: Emitting room_data for ${roomCode}. Participants: ${room?.participants?.length}`);
-                io.to(roomCode).emit('room_data', room);
+                const roomData = await formatRoomData(room);
+                console.log(`SYNC_DEBUG: Emitting room_data for ${roomCode}. Participants: ${roomData?.participants?.length}`);
+                io.to(roomCode).emit('room_data', roomData);
             } catch (error) {
                 console.error('JOIN_ROOM_ERROR:', error);
             }
         });
 
-        socket.on('playback_update', async ({ roomCode, isPlaying, currentTime, songId, userId: rawUserId }) => {
+        socket.on('playback_update', async ({ roomCode, isPlaying, currentTime, songId, songData, userId: rawUserId }) => {
             try {
                 const userId = await resolveUserId(rawUserId);
                 const room = await Room.findOne({ roomCode });
                 if (room) {
-                    const isHost = room.host.toString() === userId;
-                    const isKing = room.kings.some(k => k.toString() === userId);
+                    const hostId = room.host?._id ? room.host._id.toString() : room.host?.toString();
+                    const isHost = hostId === userId;
+                    const isKing = room.kings?.some(k => (k?._id?.toString() || k?.toString()) === userId);
 
                     if (isHost || isKing || room.isCollaborative) {
-                        // Broadcast immediately to remove latency constraint
-                        socket.to(roomCode).emit('playback_sync', { isPlaying, currentTime, songId, userId });
+                        // Broadcast immediately to room members
+                        socket.to(roomCode).emit('playback_sync', { isPlaying, currentTime, songId, songData, userId });
 
-                        // Update room state in DB asynchronously without waiting
+                        // Update room state in DB asynchronously
                         room.isPlaying = isPlaying;
                         room.currentTime = currentTime;
-                        if (songId) room.currentSong = songId;
+                        if (songData) {
+                            room.currentSong = songData;
+                        } else if (songId) {
+                            room.currentSong = songId;
+                        }
                         room.save().catch(err => console.error('PLAYBACK_SAVE_ERROR:', err));
                     }
                 }
@@ -78,10 +153,13 @@ const socketHandler = (io) => {
             try {
                 const userId = await resolveUserId(rawUserId);
                 const room = await Room.findOne({ roomCode });
-                if (room && room.host.toString() === userId) {
-                    room.isCollaborative = !room.isCollaborative;
-                    await room.save();
-                    io.to(roomCode).emit('room_update', { isCollaborative: room.isCollaborative });
+                if (room) {
+                    const hostId = room.host?._id ? room.host._id.toString() : room.host?.toString();
+                    if (hostId === userId) {
+                        room.isCollaborative = !room.isCollaborative;
+                        await room.save();
+                        io.to(roomCode).emit('room_update', { isCollaborative: room.isCollaborative });
+                    }
                 }
             } catch (error) {
                 console.error('TOGGLE_COLLAB_ERROR:', error);
@@ -93,16 +171,19 @@ const socketHandler = (io) => {
                 const targetUserId = await resolveUserId(rawTargetId);
                 const requesterId = await resolveUserId(rawRequesterId);
                 const room = await Room.findOne({ roomCode });
-                if (room && room.host.toString() === requesterId) {
-                    const index = room.kings.indexOf(targetUserId);
-                    if (index > -1) {
-                        room.kings.splice(index, 1);
-                    } else {
-                        room.kings.push(targetUserId);
+                if (room) {
+                    const hostId = room.host?._id ? room.host._id.toString() : room.host?.toString();
+                    if (hostId === requesterId) {
+                        const index = room.kings.findIndex(k => (k?._id?.toString() || k?.toString()) === targetUserId);
+                        if (index > -1) {
+                            room.kings.splice(index, 1);
+                        } else {
+                            room.kings.push(targetUserId);
+                        }
+                        await room.save();
+                        const roomData = await formatRoomData(room);
+                        io.to(roomCode).emit('room_data', roomData);
                     }
-                    await room.save();
-                    const updatedRoom = await Room.findById(room._id).populate('currentSong participants kings');
-                    io.to(roomCode).emit('room_data', updatedRoom);
                 }
             } catch (error) {
                 console.error('TOGGLE_KING_ERROR:', error);
@@ -115,11 +196,11 @@ const socketHandler = (io) => {
                 const userId = await resolveUserId(rawUserId);
                 const room = await Room.findOne({ roomCode });
                 if (room) {
-                    room.participants = room.participants.filter(p => p.toString() !== userId);
-                    room.kings = room.kings.filter(k => k.toString() !== userId);
+                    room.participants = room.participants.filter(p => (p?._id?.toString() || p?.toString()) !== userId);
+                    room.kings = room.kings.filter(k => (k?._id?.toString() || k?.toString()) !== userId);
                     await room.save();
-                    const updatedRoom = await Room.findById(room._id).populate('participants currentSong kings');
-                    io.to(roomCode).emit('room_data', updatedRoom);
+                    const roomData = await formatRoomData(room);
+                    io.to(roomCode).emit('room_data', roomData);
                 }
             } catch (error) {
                 console.error('LEAVE_ROOM_ERROR:', error);
@@ -129,7 +210,7 @@ const socketHandler = (io) => {
         socket.on('send_message', ({ roomCode, message, user }) => {
             io.to(roomCode).emit('new_message', {
                 text: message,
-                user,
+                user: user || 'Guest',
                 timestamp: new Date()
             });
         });

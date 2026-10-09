@@ -8,21 +8,17 @@ const roomSchema = new mongoose.Schema({
         trim: true
     },
     host: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+        type: mongoose.Schema.Types.Mixed,
         required: true
     },
     participants: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        type: mongoose.Schema.Types.Mixed
     }],
     kings: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        type: mongoose.Schema.Types.Mixed
     }],
     currentSong: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Song'
+        type: mongoose.Schema.Types.Mixed
     },
     isPlaying: {
         type: Boolean,
@@ -33,8 +29,7 @@ const roomSchema = new mongoose.Schema({
         default: 0
     },
     queue: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Song'
+        type: mongoose.Schema.Types.Mixed
     }],
     isCollaborative: {
         type: Boolean,
