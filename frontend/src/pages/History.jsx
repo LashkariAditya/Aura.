@@ -70,7 +70,8 @@ const History = () => {
         </div>
     );
 
-    const justSongs = historyItems.map(item => item.song);
+    const historyWithSongs = historyItems.filter(item => item?.song);
+    const justSongs = historyWithSongs.map(item => item.song);
 
     return (
         <div className="min-h-screen pt-32 pb-32 bg-background text-foreground">
@@ -114,7 +115,7 @@ const History = () => {
                                             <span className="text-[11px] tracking-widest font-bold uppercase">{user?.name}</span>
                                         </div>
                                         <div className="hidden md:block w-1 h-1 rounded-full bg-border" />
-                                        <span className="text-[11px] tracking-widest text-gray-400 uppercase font-bold">{historyItems.length} RECENT TRACKS</span>
+                                        <span className="text-[11px] tracking-widest text-gray-400 uppercase font-bold">{historyWithSongs.length} RECENT TRACKS</span>
                                     </div>
                                 </div>
                             </div>
@@ -147,9 +148,9 @@ const History = () => {
                         </div>
                     </div>
 
-                    {historyItems.length > 0 ? (
+                    {historyWithSongs.length > 0 ? (
                         <div className="space-y-12">
-                            {historyItems.map((item, idx) => {
+                            {historyWithSongs.map((item, idx) => {
                                 const song = item.song;
                                 const datePlayed = new Date(item.lastPlayed);
                                 return (

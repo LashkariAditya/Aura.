@@ -38,6 +38,7 @@ export const MusicProvider = ({ children }) => {
     const isDriveVideoRef = useRef(false);
     // Queues a video ID for when the YT player isn't ready yet on first mount
     const pendingYtIdRef = useRef(null);
+    const pendingSeekTimeRef = useRef(null);
 
     // Playback control lock for restricted sync room users
     const canChangeRef = useRef(true);
@@ -108,6 +109,9 @@ export const MusicProvider = ({ children }) => {
         setIsYt(isYoutube);
         setIsDriveVideo(isDriveVideoSong);
 
+        const targetSeek = (initialSeekTime !== null && initialSeekTime !== undefined && initialSeekTime > 0) ? initialSeekTime : 0;
+        pendingSeekTimeRef.current = targetSeek;
+
         // Clean up previous howler sound
         if (soundRef.current && !isYoutube) {
             const oldSound = soundRef.current;
@@ -173,19 +177,18 @@ export const MusicProvider = ({ children }) => {
 
             if (ytPlayerRef.current) {
                 try {
-                    const startSec = initialSeekTime ? Math.max(0, initialSeekTime) : 0;
-                    ytPlayerRef.current.loadVideoById({ videoId: ytId, startSeconds: startSec });
+                    ytPlayerRef.current.loadVideoById({ videoId: ytId, startSeconds: targetSeek });
                     ytPlayerRef.current.setVolume(volume);
                     startTimer();
                 } catch (err) {
-                    // Player ref is stale (e.g. after HMR). Queue the ID for onReady.
+                    // Player ref is stale (e.g. after HMR). Queue the ID and seek for onReady.
                     console.warn('YT_PLAYER_STALE, queuing:', ytId, err.message);
-                    pendingYtIdRef.current = ytId;
+                    pendingYtIdRef.current = { videoId: ytId, startSeconds: targetSeek };
                     ytPlayerRef.current = null;
                 }
             } else {
-                // Player not ready yet — queue the ID; onReady will handle it
-                pendingYtIdRef.current = ytId;
+                // Player not ready yet — queue the ID and seek; onReady will handle it
+                pendingYtIdRef.current = { videoId: ytId, startSeconds: targetSeek };
             }
         } else if (isDriveVideoSong) {
             if (Howler.ctx && Howler.ctx.state === 'running') {
@@ -194,8 +197,8 @@ export const MusicProvider = ({ children }) => {
             if (driveVideoRef.current) {
                 driveVideoRef.current.src = song.audioUrl;
                 driveVideoRef.current.volume = volume / 100;
-                if (initialSeekTime !== null && initialSeekTime !== undefined) {
-                    driveVideoRef.current.currentTime = initialSeekTime;
+                if (targetSeek > 0) {
+                    try { driveVideoRef.current.currentTime = targetSeek; } catch (_) {}
                 }
                 driveVideoRef.current.play().catch(e => console.error('DRIVE_VIDEO_PLAY_FAILED:', e));
                 startTimer();
@@ -204,6 +207,17 @@ export const MusicProvider = ({ children }) => {
             if (Howler.ctx && Howler.ctx.state === 'suspended') {
                 Howler.ctx.resume();
             }
+
+            let appliedSeek = false;
+            const applyInitialSeek = () => {
+                if (!appliedSeek && pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+                    appliedSeek = true;
+                    const elapsedSec = (Date.now() - loadStartTime) / 1000;
+                    const seekPos = pendingSeekTimeRef.current + elapsedSec;
+                    sound.seek(seekPos);
+                    pendingSeekTimeRef.current = null;
+                }
+            };
 
             const sound = new Howl({
                 src: [song.audioUrl],
@@ -216,17 +230,11 @@ export const MusicProvider = ({ children }) => {
                     setIsPlaying(true);
                     setIsLoading(false);
                     startTimer();
-                    if (initialSeekTime !== null && initialSeekTime !== undefined && initialSeekTime > 0) {
-                        const elapsedSec = (Date.now() - loadStartTime) / 1000;
-                        sound.seek(initialSeekTime + elapsedSec);
-                    }
+                    applyInitialSeek();
                 },
                 onload: () => {
                     setIsLoading(false);
-                    if (initialSeekTime !== null && initialSeekTime !== undefined && initialSeekTime > 0) {
-                        const elapsedSec = (Date.now() - loadStartTime) / 1000;
-                        sound.seek(initialSeekTime + elapsedSec);
-                    }
+                    applyInitialSeek();
                 },
                 onloaderror: (id, err) => {
                     console.error('AUDIO_LOAD_ERROR:', err);
@@ -357,33 +365,37 @@ export const MusicProvider = ({ children }) => {
         if (!force && !canChangeRef.current) return;
 
         if (isYtRef.current && ytPlayerRef.current) {
-            const duration = ytPlayerRef.current.getDuration();
-            if (duration > 0) {
-                const targetTime = isPercent ? (value / 100) * duration : value;
+            const duration = ytPlayerRef.current.getDuration() || 0;
+            const targetTime = isPercent ? (duration > 0 ? (value / 100) * duration : 0) : value;
+            try {
                 ytPlayerRef.current.seekTo(targetTime, true);
+            } catch (_) {}
+            if (duration > 0) {
                 setProgress(isPercent ? value : (targetTime / duration) * 100);
             }
             return;
         }
 
         if (isDriveVideoRef.current && driveVideoRef.current) {
-            const duration = driveVideoRef.current.duration;
-            if (duration > 0) {
-                const targetTime = isPercent ? (value / 100) * duration : value;
+            const duration = driveVideoRef.current.duration || 0;
+            const targetTime = isPercent ? (duration > 0 ? (value / 100) * duration : 0) : value;
+            try {
                 driveVideoRef.current.currentTime = targetTime;
+            } catch (_) {}
+            if (duration > 0) {
                 setProgress(isPercent ? value : (targetTime / duration) * 100);
             }
             return;
         }
 
         if (soundRef.current) {
-            const duration = soundRef.current.duration();
-            const targetTime = isPercent ? (value / 100) * duration : value;
-            soundRef.current.seek(targetTime);
-            if (isPercent) {
-                setProgress(value);
-            } else {
-                setProgress((targetTime / duration) * 100);
+            const duration = soundRef.current.duration() || 0;
+            const targetTime = isPercent ? (duration > 0 ? (value / 100) * duration : 0) : value;
+            try {
+                soundRef.current.seek(targetTime);
+            } catch (_) {}
+            if (duration > 0) {
+                setProgress(isPercent ? value : (targetTime / duration) * 100);
             }
         }
     }, []);
@@ -642,9 +654,15 @@ export const MusicProvider = ({ children }) => {
                             ytPlayerRef.current = event.target;
                             ytPlayerRef.current.setVolume(volume);
                             // Play any video that was queued before the player was ready
+                            // pendingYtIdRef can be { videoId, startSeconds } or a bare string
                             if (pendingYtIdRef.current) {
                                 try {
-                                    ytPlayerRef.current.loadVideoById(pendingYtIdRef.current);
+                                    const pending = pendingYtIdRef.current;
+                                    if (typeof pending === 'object') {
+                                        ytPlayerRef.current.loadVideoById(pending);
+                                    } else {
+                                        ytPlayerRef.current.loadVideoById({ videoId: pending, startSeconds: 0 });
+                                    }
                                     ytPlayerRef.current.setVolume(volume);
                                 } catch (err) {
                                     console.error('YT_PENDING_PLAY_FAILED:', err.message);

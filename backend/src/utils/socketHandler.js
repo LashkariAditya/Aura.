@@ -35,39 +35,21 @@ const formatRoomData = async (room, roomCode) => {
         }
     }
 
-    // Merge DB participants with currently connected active sockets
+    // Participants come ONLY from currently connected active sockets — never from stale DB state.
+    // This ensures refreshed/disconnected users disappear immediately.
     const activeMap = activeRoomSockets.get(roomCode) || new Map();
     const activeListeners = Array.from(activeMap.values());
 
-    const combinedParticipantsMap = new Map();
-
-    // 1. Add active connected sockets first
+    // Deduplicate by userId (_id); keep the most recently seen socket entry for each user
+    const participantsByUserId = new Map();
     for (const listener of activeListeners) {
-        combinedParticipantsMap.set(listener.socketId, listener);
-    }
-
-    // 2. Add DB participants
-    if (Array.isArray(roomObj.participants)) {
-        for (const pId of roomObj.participants) {
-            const pIdStr = pId?._id ? pId._id.toString() : pId?.toString();
-            if (pIdStr && mongoose.Types.ObjectId.isValid(pIdStr)) {
-                const pUser = await User.findById(pIdStr).select('name email avatar role');
-                if (pUser) {
-                    const uIdStr = pUser._id.toString();
-                    if (!Array.from(combinedParticipantsMap.values()).some(l => l._id?.toString() === uIdStr)) {
-                        combinedParticipantsMap.set(uIdStr, {
-                            _id: uIdStr,
-                            name: pUser.name,
-                            avatar: pUser.avatar,
-                            role: pUser.role
-                        });
-                    }
-                }
-            }
+        const key = listener._id?.toString() || listener.socketId;
+        if (!participantsByUserId.has(key)) {
+            participantsByUserId.set(key, listener);
         }
     }
 
-    roomObj.participants = Array.from(combinedParticipantsMap.values());
+    roomObj.participants = Array.from(participantsByUserId.values());
 
     // Kings
     if (Array.isArray(roomObj.kings)) {
@@ -109,6 +91,10 @@ const socketHandler = (io) => {
                 let userId = await resolveUserId(rawUserId);
                 if (!userId) userId = `guest_${socket.id.substring(0, 8)}`;
                 console.log(`SYNC_DEBUG: join_room attempt - User: ${userId}, Room: ${roomCode}, Socket: ${socket.id}`);
+
+                // Store userId on socket for disconnect cleanup
+                socket._userId = userId;
+                socket._roomCode = roomCode;
                 
                 socket.join(roomCode);
                 socketToRoom.set(socket.id, roomCode);
@@ -148,7 +134,6 @@ const socketHandler = (io) => {
                     const isParticipant = room.participants.some(p =>
                         (p?._id?.toString() || p?.toString()) === userId
                     );
-
                     if (!isParticipant) {
                         console.log(`SYNC_DEBUG: Adding participant ${userId} to room ${roomCode}`);
                         room.participants.push(userId);
@@ -247,6 +232,8 @@ const socketHandler = (io) => {
                 activeRoomSockets.get(roomCode).delete(socket.id);
             }
             socketToRoom.delete(socket.id);
+            socket._userId = null;
+            socket._roomCode = null;
 
             try {
                 const userId = await resolveUserId(rawUserId);
@@ -290,9 +277,28 @@ const socketHandler = (io) => {
                 if (activeRoomSockets.has(roomCode)) {
                     activeRoomSockets.get(roomCode).delete(socket.id);
                 }
+
+                // Remove from DB participants so stale data never resurfaces
+                const userId = socket._userId;
                 try {
                     const room = await Room.findOne({ roomCode });
                     if (room) {
+                        if (userId) {
+                            // Only remove from DB if no OTHER socket for same user is still in the room
+                            const activeMap = activeRoomSockets.get(roomCode) || new Map();
+                            const stillConnected = Array.from(activeMap.values()).some(
+                                l => l._id?.toString() === userId
+                            );
+                            if (!stillConnected) {
+                                room.participants = room.participants.filter(
+                                    p => (p?._id?.toString() || p?.toString()) !== userId
+                                );
+                                room.kings = room.kings.filter(
+                                    k => (k?._id?.toString() || k?.toString()) !== userId
+                                );
+                                await room.save();
+                            }
+                        }
                         const roomData = await formatRoomData(room, roomCode);
                         io.to(roomCode).emit('room_data', roomData);
                     }

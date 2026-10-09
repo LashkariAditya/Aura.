@@ -27,10 +27,14 @@ export const SyncProvider = ({ children }) => {
     const playingRef = useRef(isPlaying);
     const songRef = useRef(currentSong);
     const timeRef = useRef(currentTime);
+    const roomCodeRef = useRef(roomCode);
+    const userRef = useRef(user);
 
     useEffect(() => { playingRef.current = isPlaying; }, [isPlaying]);
     useEffect(() => { songRef.current = currentSong; }, [currentSong]);
     useEffect(() => { timeRef.current = currentTime; }, [currentTime]);
+    useEffect(() => { roomCodeRef.current = roomCode; }, [roomCode]);
+    useEffect(() => { userRef.current = user; }, [user]);
 
     useEffect(() => {
         const newSocket = io(BACKEND_URL, {
@@ -38,7 +42,19 @@ export const SyncProvider = ({ children }) => {
         });
         setSocket(newSocket);
 
+        // When the user refreshes or closes the tab, emit leave_room immediately
+        // so the server removes them from the room's participant list without waiting for TCP disconnect.
+        const handleBeforeUnload = () => {
+            const currentRoom = roomCodeRef.current;
+            const uid = userRef.current ? (userRef.current._id || userRef.current.id) : null;
+            if (newSocket && currentRoom) {
+                newSocket.emit('leave_room', { roomCode: currentRoom, userId: uid });
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
         return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
             if (newSocket) newSocket.disconnect();
         };
     }, []);
@@ -213,7 +229,7 @@ export const SyncProvider = ({ children }) => {
             if (adjustedTime !== undefined) {
                 const myLiveTime = getCurrentTime ? getCurrentTime() : timeRef.current;
                 const drift = Math.abs(adjustedTime - myLiveTime);
-                if (drift > 0.3) { // 300ms precision threshold
+                if (drift > 0.2) { // 200ms precision threshold
                     seek(adjustedTime, false, true);
                 }
             }
@@ -237,7 +253,7 @@ export const SyncProvider = ({ children }) => {
         }
     };
 
-    // Host/King: Periodic sync (Heartbeat) - Sends live time every 1.5s to keep all members tightly synced
+    // Host/King: Periodic sync (Heartbeat) - Sends live time every 1s to keep all members tightly synced
     useEffect(() => {
         if (!roomCode || (!isHost && !isKing && !isCollaborative)) return;
 
@@ -250,7 +266,7 @@ export const SyncProvider = ({ children }) => {
                     songId: currentSong?._id || currentSong?.id || currentSong?.audioUrl
                 }, true);
             }
-        }, 1500);
+        }, 1000);
 
         return () => clearInterval(interval);
     }, [isPlaying, currentSong, roomCode, isHost, isKing, isCollaborative, updatePlayback, getCurrentTime]);

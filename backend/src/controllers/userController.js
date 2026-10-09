@@ -46,7 +46,7 @@ export const getPublicProfile = async (req, res) => {
             // It's a User profile (curator)
             songs = await Song.find({ uploadedBy: profileUser._id, isActive: true })
                 .sort({ createdAt: -1 });
-            playlists = await Playlist.find({ user: profileUser._id })
+            playlists = await Playlist.find({ userId: profileUser._id })
                 .sort({ createdAt: -1 });
             followersCount = profileUser.followers.length;
             followingCount = profileUser.following.length;
@@ -194,7 +194,7 @@ export const getUserStats = async (req, res) => {
         const likedSongsCount = user.likedSongs?.length || 0;
 
         // 2. Count playlists created by user
-        const playlistsCount = await Playlist.countDocuments({ user: userId });
+        const playlistsCount = await Playlist.countDocuments({ userId: userId });
 
         // 3. Calculate listening hours from History
         const historyData = await History.aggregate([

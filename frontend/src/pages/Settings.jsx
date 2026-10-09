@@ -6,7 +6,7 @@ import { toast } from 'react-hot-toast';
 import api from '../services/api';
 
 const Settings = () => {
-    const { user, setUser } = useAuth();
+    const { user, updateUser } = useAuth();
     const { darkMode, toggleDarkMode } = useTheme();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -35,7 +35,7 @@ const Settings = () => {
         try {
             const response = await api.put('/users/profile', formData);
             if (response.data.success) {
-                setUser(response.data.data.user);
+                updateUser(response.data.data.user);
                 toast.success('Settings updated successfully');
             }
         } catch (error) {

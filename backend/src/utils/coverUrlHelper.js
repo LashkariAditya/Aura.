@@ -17,7 +17,9 @@
  */
 
 const getBackendUrl = () => {
-    let url = process.env.BACKEND_URL || 'https://aura-music.up.railway.app';
+    let url = process.env.BACKEND_URL
+        || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+        || 'https://aura-production-8a06.up.railway.app';
     if (url.endsWith('/')) url = url.slice(0, -1);
     return url;
 };

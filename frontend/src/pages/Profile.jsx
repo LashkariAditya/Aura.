@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import userService from '../services/userService';
+import playlistService from '../services/playlistService';
 import { LogOut, Settings, Heart, Music, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
